@@ -52,7 +52,7 @@ from s1_geometry import (
     sar_ground_heading,                 # heading (deg) at ref_lat
     sar_ground_heading_uncertainty,     # U(lat) (deg), per hemisphere
     sar_heading_and_uncertainty,        # (heading, U) at once
-    orbit_direction_from_ring,          # the dlat rule
+    orbit_direction_from_ring,          # pass direction (flight rule)
 )
 ```
 
@@ -106,16 +106,16 @@ two pooled degree-4 polynomials (ascending / descending) describe the whole
 constellation. Beyond |lat| = 70 deg the polynomials extrapolate and the
 uncertainty model carries the extra error.
 
-The **orbit direction** is derived from the footprint: the CDSE
-`GeoFootprint` ring is a 4-vertex polygon in a fixed vertex order
-`[bottom-left, top-left, top-right, bottom-right]` (first vertex repeated).
-With `dlat = lat(v[1]) - lat(v[0])`:
-
-* `dlat < -0.3 deg` -> ascending (slice oriented NW-SE)
-* `dlat > +0.3 deg` -> descending (slice oriented NE-SW)
-* otherwise -> **turning** (polar turnaround): near-due-west heading of
-  270 deg (the satellite keeps its westward ground drift) with the large
-  turning-latitude uncertainty.
+The **orbit direction** is the *pass* (flight) direction derived from the
+footprint, not the orbit branch: a northbound pass is `ascending`, a
+southbound pass `descending`. The flight runs along the burst (along-track)
+edges of the 4-vertex SAFE parallelogram, which are the *shorter* opposite-
+edge family for IW. The rule is order-robust: it handles both the standard
+CDSE `GeoFootprint` vertex order (counter-clockwise) and the clockwise ring
+copied from the CDSE product page, and reduces to the historical
+`dlat = lat(v[1]) - lat(v[0])` rule for the standard order. The pass is
+**turning** (polar turnaround, near-due-west heading of 270 deg) when the
+flight's north component is below 0.3 deg in magnitude.
 
 The **uncertainty** is per hemisphere: the p95 of the fit error binned by
 |lat| (degree-4 for |lat| <= 70, piecewise-linear beyond, clamped at the
@@ -162,10 +162,16 @@ within the returned U(lat)** and 99.96 % within 2 U(lat). In the fitted
 window |lat| <= 70 deg the mean error is 0.14-0.25 deg per latitude band and
 the p95 stays below 1.19 deg.
 
-The orbit-direction rule was validated on 3844 CDSE GeoFootprint rings with
-measured OWI headings (2026-11-01..12, S1C+S1D, both branches): 99.77 %
-agreement with the orbit relabel; all exceptions are the |dlat| < 0.3 deg
-turning products at 77.1-77.5 deg S, correctly classified as turning.
+The orbit-direction rule was validated against the `orbitDirection`
+attribute of 66243 CDSE IW/EW rings (13 daily v2 Parquets,
+2026-11-01..13): **IW 99.70 % and EW 92.05 %** (both unchanged by the
+order-robust rule), **ETA 97.82 %** (the historical dlat rule gave 55.66 %,
+because ETA rings use a rotated vertex order). The remaining EW errors are
+the pre-existing high-latitude ones. The flight direction is two-valued from
+the ring alone (the near/far and start/end corners are unlabeled, a Z2
+symmetry): the rule resolves it for the two documented vertex orders
+(standard CDSE and product-page); a fully reversed ring may be
+misclassified.
 
 The angle model was validated on 66243 CDSE IW/EW rings: **98.9 % (IW) and
 90.8 % (EW) of the products invert an orbit altitude in the documented

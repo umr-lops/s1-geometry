@@ -93,11 +93,16 @@ The heading of an IW acquisition depends almost only on the latitude and the
 orbit direction; the four satellites agree within a fraction of a degree, so
 two pooled degree-4 polynomials (ascending / descending) describe the whole
 constellation (fit window \|lat\| <= 70 deg; beyond it they extrapolate and the
-uncertainty model carries the extra error). The orbit direction is derived
-from the footprint: with ``dlat = lat(v[1]) - lat(v[0])`` on the 4-vertex
-ring (fixed CDSE order), ``dlat < -0.3`` is ascending, ``dlat > +0.3`` is
-descending, otherwise the product is at the polar turnaround (**turning**)
-and receives a near-due-west heading of 270 deg.
+uncertainty model carries the extra error). The orbit direction is the
+*pass* (flight) direction derived from the footprint: the flight runs along
+the burst (along-track) edges of the 4-vertex SAFE parallelogram, the
+shorter opposite-edge family for IW. The rule is order-robust -- it handles
+both the standard CDSE ``GeoFootprint`` vertex order (counter-clockwise) and
+the clockwise ring copied from the CDSE product page, and reduces to the
+historical ``dlat = lat(v[1]) - lat(v[0])`` rule for the standard order.
+A northbound pass is ascending, a southbound pass descending; a product at
+the polar turnaround (**turning**, flight north component below 0.3 deg in
+magnitude) receives a near-due-west heading of 270 deg.
 
 Validation
 ----------
