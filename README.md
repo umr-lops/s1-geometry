@@ -79,6 +79,11 @@ and through the catalogue-oriented functions `sar_incidence_angle(...)` /
 `sar_elevation_angle(...)` (the functions behind the `sar_incidence_angle` /
 `sar_elevation_angle` columns).
 
+The reference point must lie **inside the SAFE footprint** (the 4-vertex
+parallelogram, boundary included).  If it is outside,
+`estimate_incidence_elevation` raises a `ValueError` ("outside the SAFE
+footprint") instead of returning an extrapolated, meaningless value.
+
 ### CLI
 
 ```bash
