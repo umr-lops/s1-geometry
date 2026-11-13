@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
+
+# generated documentation, rebuilt by `make -C docs html`
+docs/_build/
+
+# container images, built with `apptainer build <name>.sif apptainer.def`
+*.sif

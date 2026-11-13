@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "s1-geometry"
+version = "0.1.0"
+description = "Tool to estimate geometric quantities (such as incidence, elevation or ground heading angle) from a Sentinel-1 SAR footprint."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "numpy",
+]
+
+[project.optional-dependencies]
+# Needed only by the CDSE daily-Parquet footprint indexer (load_sar_polygons).
+parquet = ["pandas", "pyarrow"]
+docs = ["sphinx", "furo", "myst-parser"]
+
+[project.scripts]
+s1-geometry = "s1_geometry.cli:main"
+
+[project.urls]
+Repository = "https://github.com/umr-lops/s1-geometry"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/s1_geometry"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]

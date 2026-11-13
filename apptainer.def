@@ -1,0 +1,36 @@
+Bootstrap: docker
+From: python:3.11-slim
+
+# Build from a checkout of this repository:
+#
+#     apptainer build /tmp/s1-geometry.sif apptainer.def
+#
+# then run it like the console script:
+#
+#     apptainer run /tmp/s1-geometry.sif --help
+
+%files
+    pyproject.toml /opt/s1-geometry/pyproject.toml
+    README.md /opt/s1-geometry/README.md
+    LICENSE /opt/s1-geometry/LICENSE
+    src /opt/s1-geometry/src
+
+%post
+    python -m pip install --no-cache-dir -e /opt/s1-geometry
+
+%environment
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec s1-geometry "$@"
+
+%labels
+    org.soba.tool s1-geometry
+    org.soba.description Geometric quantities from a Sentinel-1 SAR footprint
+
+%help
+    Estimate the ground heading of a Sentinel-1 IW acquisition from its
+    SAFE footprint polygon:
+
+        apptainer run --bind /path/to/footprints:/footprints s1-geometry.sif \
+            heading /footprints/footprint.geojson --lat 36.59

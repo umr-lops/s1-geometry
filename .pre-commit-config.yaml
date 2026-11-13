@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      # - id: ruff-format  # enable to adopt its formatting
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: /scratch/agrouaze/opencode_sandbox/micromamba/envs/dev-agent/bin/python -m pytest -q
+        language: system
+        pass_filenames: false
+        # not part of a normal commit: use `pre-commit run --hook-stage manual pytest`
+        stages: [manual]
