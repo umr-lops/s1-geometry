@@ -26,7 +26,7 @@ from s1_geometry.angles import (
     sigma_of_r_s,
     width_const_slant_km,
 )
-from tests.rings import ASC_RING, DESC_RING, EW_RING
+from tests.rings import ASC_RING, DESC_RING, EW_RING, USER_DESC_RING_CW
 
 
 def _center(ring):
@@ -109,7 +109,7 @@ def test_width_to_r_s_rejects_out_of_band_widths():
 # Footprint width and across-track position
 # --------------------------------------------------------------------------- #
 def test_swath_width_iw_rings():
-    for ring in (ASC_RING, DESC_RING):
+    for ring in (ASC_RING, DESC_RING, USER_DESC_RING_CW):
         assert 240.0 <= swath_width_km(ring) <= 280.0
 
 
@@ -193,6 +193,17 @@ def test_estimate_descending_iw_ring():
     result = estimate_incidence_elevation(DESC_RING, clon, clat, "IW")
     assert 25.0 <= result.incidence_deg <= 45.0
     assert R_S_MIN_KM <= result.r_s_km <= R_S_MAX_KM
+
+
+def test_estimate_product_page_cw_ring():
+    # The CW ring copied from the CDSE product page (descending) must invert
+    # to a valid orbit altitude and a mid-swath across-track position.
+    clon, clat = _center(USER_DESC_RING_CW)
+    result = estimate_incidence_elevation(USER_DESC_RING_CW, clon, clat, "IW")
+    assert R_S_MIN_KM <= result.r_s_km <= R_S_MAX_KM
+    assert result.dfrac == pytest.approx(0.5, abs=1e-9)
+    assert 25.0 <= result.incidence_deg <= 45.0
+    assert result.elevation_deg == pytest.approx(90.0 - result.incidence_deg, abs=1e-12)
 
 
 def test_estimate_accepts_a_geojson_string():

@@ -5,7 +5,7 @@ import json
 import pytest
 
 from s1_geometry.cli import main
-from tests.rings import ASC_RING, DESC_RING, EW_RING
+from tests.rings import ASC_RING, DESC_RING, EW_RING, USER_DESC_RING_CW
 
 
 def test_heading_inline_geojson(capsys):
@@ -38,6 +38,16 @@ def test_heading_accepts_a_bare_ring(capsys):
     ring = json.dumps([[lon, lat] for lon, lat in DESC_RING])
     assert main(["heading", ring, "--lat", "36.4"]) == 0
     assert "orbit_direction: descending" in capsys.readouterr().out
+
+
+def test_heading_product_page_cw_ring_is_descending(capsys):
+    # Regression: the CW ring copied from the CDSE product page used to be
+    # classified ascending (heading ~350 deg); it is a descending product.
+    ring = json.dumps([[lon, lat] for lon, lat in USER_DESC_RING_CW])
+    assert main(["heading", ring, "--lat", "46.9"]) == 0
+    out = capsys.readouterr().out
+    assert "orbit_direction: descending" in out
+    assert "heading_deg: 189." in out
 
 
 def test_heading_rejects_an_unreadable_polygon(capsys):

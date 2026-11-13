@@ -15,7 +15,13 @@ from s1_geometry.footprint import (
     polygon_index_for_point,
     ring_to_geojson,
 )
-from tests.rings import ASC_RING, DESC_RING, TURN_RING
+from tests.rings import (
+    ASC_RING,
+    ASC_RING_CW,
+    DESC_RING,
+    TURN_RING,
+    USER_DESC_RING_CW,
+)
 
 
 @pytest.mark.parametrize(
@@ -25,6 +31,11 @@ from tests.rings import ASC_RING, DESC_RING, TURN_RING
         (DESC_RING, DESCENDING),
         (TURN_RING, TURNING),
         (ASC_RING[:4], ASCENDING),  # open ring (no repeated first vertex)
+        # product-page vertex order (clockwise): the same products as the
+        # standard-order rings above, plus the real descending ring reported
+        # as a bug (CDSE product page, ~47 N)
+        (USER_DESC_RING_CW, DESCENDING),
+        (ASC_RING_CW, ASCENDING),
     ],
 )
 def test_orbit_direction_from_ring(ring, expected):
