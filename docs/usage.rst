@@ -92,7 +92,7 @@ The model
 The heading of an IW acquisition depends almost only on the latitude and the
 orbit direction; the four satellites agree within a fraction of a degree, so
 two pooled degree-4 polynomials (ascending / descending) describe the whole
-constellation (fit window |lat| <= 70 deg; beyond it they extrapolate and the
+constellation (fit window \|lat\| <= 70 deg; beyond it they extrapolate and the
 uncertainty model carries the extra error). The orbit direction is derived
 from the footprint: with ``dlat = lat(v[1]) - lat(v[0])`` on the 4-vertex
 ring (fixed CDSE order), ``dlat < -0.3`` is ascending, ``dlat > +0.3`` is
@@ -103,9 +103,9 @@ Validation
 ----------
 
 Against the measured OWI heading of the 11107 products used for the fit:
-mean |error| 0.749 deg, median 0.139 deg, p95 2.90 deg; 98.88 % of the
+mean \|error\| 0.749 deg, median 0.139 deg, p95 2.90 deg; 98.88 % of the
 headings fall within the returned U(lat) and 99.96 % within 2 U(lat). In the
-fitted window |lat| <= 70 deg the mean error is 0.14-0.25 deg per latitude
+fitted window \|lat\| <= 70 deg the mean error is 0.14-0.25 deg per latitude
 band and the p95 stays below 1.19 deg.
 
 The angle model
@@ -127,7 +127,7 @@ the ESA / SentiWiki documented angles to <= 0.07 deg):
   min / max-altitude values per sub-swath), the geocentric incidence is the
   closed form ``theta_c = asin[(R_s/R_e) * sin(sigma)]``. The local
   (ellipsoid-normal) incidence adds the deflection of the vertical (max
-  ~0.19 deg near |lat| = 45 deg) and the elevation is exactly
+  ~0.19 deg near \|lat\| = 45 deg) and the elevation is exactly
   ``90 deg - incidence``.
 
 The across-track width ``W`` is the spherical distance (6371 km sphere)

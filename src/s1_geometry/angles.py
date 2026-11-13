@@ -18,7 +18,7 @@ ground swath over the orbit).  Two consistent models are combined
   min/max-altitude values per sub-swath), the geocentric incidence is the
   closed form ``theta_c = asin[(R_s/R_e) * sin(sigma)]``.  The local
   (ellipsoid-normal) incidence adds the deflection of the vertical
-  (max ~0.19 deg near |lat| = 45 deg), and the elevation is exactly
+  (max ~0.19 deg near \\|lat\\| = 45 deg), and the elevation is exactly
   ``90 deg - incidence``.
 
 The across-track width ``W`` is the spherical distance (6371 km sphere)
@@ -133,7 +133,7 @@ def geocentric_radius_km(lon_deg: float, lat_deg: float) -> float:
 def deflection_of_vertical_deg(lat_deg: float) -> float:
     """Angle (deg) between the geocentric direction and the ellipsoid normal.
 
-    Maximum ~0.19 deg near |lat| = 45 deg; zero at the equator and poles.
+    Maximum ~0.19 deg near \\|lat\\| = 45 deg; zero at the equator and poles.
     """
     lat = math.radians(lat_deg)
     lat_gc = math.atan((1.0 - WGS84_E2) * math.tan(lat))

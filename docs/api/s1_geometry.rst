@@ -17,6 +17,4 @@ Module contents
 ---------------
 
 .. automodule:: s1_geometry
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   :no-members:

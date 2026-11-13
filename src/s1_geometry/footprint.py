@@ -22,10 +22,10 @@ ASCENDING = "ascending"
 DESCENDING = "descending"
 TURNING = "turning"
 
-#: |lat(v[1]) - lat(v[0])| below which a SAFE polygon is classified as
+#: \\|lat(v[1]) - lat(v[0])\\| below which a SAFE polygon is classified as
 #: turning. Measured on 5012 IW OCN rings (2026-11-01..12): 11 products
-#: (0.2 %, all 2SSH at 77.1-77.5 S, at the polar turn) have |dlat| < 0.3 deg,
-#: the next smallest is 0.31 deg, and typical |dlat| is ~1.5 deg.
+#: (0.2 %, all 2SSH at 77.1-77.5 S, at the polar turn) have \\|dlat\\| < 0.3 deg,
+#: the next smallest is 0.31 deg, and typical \\|dlat\\| is ~1.5 deg.
 DLAT_TURN_THRESHOLD_DEG = 0.3
 
 
@@ -75,7 +75,7 @@ def orbit_direction_from_ring(
 
     Validated on 3844 CDSE GeoFootprint rings with measured OWI headings
     (2026-11-01..12, S1C+S1D, both branches): 99.77 % agreement with the
-    orbit relabel; all exceptions are the |dlat| < 0.3 deg turning products
+    orbit relabel; all exceptions are the \\|dlat\\| < 0.3 deg turning products
     at -77.1..-77.5 deg S, correctly classified as turning.
     """
     points = _as_point_array(ring)
