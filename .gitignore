@@ -9,5 +9,8 @@ build/
 # generated documentation, rebuilt by `make -C docs html`
 docs/_build/
 
+# end2end example output, rebuilt by `python examples/incidence_elevation_end2end.py`
+examples/data/*_angles.parquet
+
 # container images, built with `apptainer build <name>.sif apptainer.def`
 *.sif

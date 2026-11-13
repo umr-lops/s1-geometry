@@ -3,10 +3,10 @@
 Tool to estimate geometric quantities (such as incidence, elevation or
 ground heading angle) from a Sentinel-1 SAR footprint.
 
-The current release (v0.1) provides the **IW ground heading** as a function
+The current release (v0.2) provides the **IW ground heading** as a function
 of the reference point and the SAFE footprint polygon, with a
-latitude-dependent uncertainty. Incidence angle and elevation angle
-estimators are planned on the same footprint-based architecture.
+latitude-dependent uncertainty, and the **incidence / elevation angles** of
+IW and EW acquisitions at a reference point.
 
 ## Install
 
@@ -56,18 +56,47 @@ from s1_geometry import (
 )
 ```
 
+The incidence / elevation angles of an IW or EW acquisition are estimated at
+a reference point from the SAFE footprint and the imaging mode:
+
+```python
+from s1_geometry import estimate_incidence_elevation
+
+# sar_polygon as above; mode "IW" (default) or "EW"
+angles = estimate_incidence_elevation(sar_polygon, ref_lon=10.5, ref_lat=36.59, mode="IW")
+
+angles.mode             # "IW" | "EW"
+angles.dfrac            # 0 = near range line, 1 = far range line
+angles.swath_width_km   # across-track ground width of the footprint (km)
+angles.r_s_km           # inverted satellite geocentric distance (km)
+angles.incidence_deg    # incidence angle from the local vertical (deg)
+angles.elevation_deg    # 90 - incidence (deg, exact)
+```
+
+The same quantities are available on the generic entry point
+(`estimate_geometry(sar_polygon, ref_lon=10.5, ref_lat=36.59, mode="IW")`)
+and through the catalogue-oriented functions `sar_incidence_angle(...)` /
+`sar_elevation_angle(...)` (the functions behind the `sar_incidence_angle` /
+`sar_elevation_angle` columns).
+
 ### CLI
 
 ```bash
 s1-geometry heading footprint.geojson --lat 36.59
 s1-geometry heading '{"type": "Polygon", "coordinates": [[...]]}' --lat 36.59 --json
+s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode IW
+s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --json
 ```
 
 The polygon argument is a GeoJSON file path or an inline JSON string: a
 GeoJSON Polygon object, a GeoJSON Feature, or a bare ring of [lon, lat]
 vertices; `--json` prints a machine-readable result.
 
-A runnable example lives in [`examples/heading_from_footprint.py`](examples/heading_from_footprint.py).
+Runnable examples: [`examples/heading_from_footprint.py`](examples/heading_from_footprint.py)
+and [`examples/incidence_elevation_end2end.py`](examples/incidence_elevation_end2end.py)
+(the end-to-end script turns a Parquet of footprints + reference positions
+into a Parquet with the `sar_incidence_angle` / `sar_elevation_angle` columns;
+a bundled 10-row sample lives in `examples/data/`).
 
 ## The model
 
@@ -94,6 +123,32 @@ measured turning latitudes 84.5 N / 77.5 S). It grows with latitude so that
 users can decide for themselves instead of rejecting high-latitude
 acquisitions.
 
+The **incidence / elevation angles** combine two consistent models (verified
+against the ESA / SentiWiki documented angles to <= 0.07 deg):
+
+* **Constant slant range** (the CDSE catalogue footprint): the across-track
+  ground width W of the 4-vertex ring is a monotonic function of the
+  satellite geocentric distance R_s; the catalogue polygon is computed with
+  the mean Earth radius (6371 km), so inverting W -> R_s (bisection)
+  calibrates the satellite altitude from the footprint alone, with no orbit
+  file. In the standard CDSE vertex order (GRDH/GRDM/SLC/OCN) the range lines
+  are the v0-v1 (far) and v2-v3 (near) edges, ascending and descending alike;
+  rings with a rotated vertex order (e.g. ETA) fall back to the other edge
+  pair when the standard width does not invert to a valid orbit altitude.
+* **Off-nadir** (the actual radar steering): with R_s, the WGS84 geocentric
+  radius R_e of the reference point and the off-nadir angle sigma (the linear
+  roll law between the documented min / max-altitude values per sub-swath),
+  the geocentric incidence is the closed form
+  `theta_c = asin[(R_s/R_e) * sin(sigma)]`; the local (ellipsoid-normal)
+  incidence adds the deflection of the vertical (max ~0.19 deg near
+  |lat| = 45 deg) and the elevation is exactly `90 deg - incidence`.
+
+The reference point selects sigma through its across-track position
+`dfrac` (0 = near range line, 1 = far range line). Full-swath footprints are
+the supported case; a partial-swath EW footprint whose width does not invert
+to an orbit altitude in the documented 697.6-725.8 km band raises
+`ValueError`.
+
 ## Validation
 
 Fitted on 13 consecutive days of S1 IW OCN OWI data from all four satellites
@@ -112,11 +167,18 @@ measured OWI headings (2026-11-01..12, S1C+S1D, both branches): 99.77 %
 agreement with the orbit relabel; all exceptions are the |dlat| < 0.3 deg
 turning products at 77.1-77.5 deg S, correctly classified as turning.
 
+The angle model was validated on 66243 CDSE IW/EW rings: **98.9 % (IW) and
+90.8 % (EW) of the products invert an orbit altitude in the documented
+697.6-725.8 km band**; the off-nadir model reproduces the documented
+per-sub-swath angles to <= 0.07 deg, and the full chain (ring -> W -> R_s ->
+incidence) is simulated to <= 0.11 deg (IW) and <= 0.05 deg (EW) maximum
+error.
+
 ## Roadmap
 
 - [x] IW ground heading `sar_ground_heading = F(ref_lat, SAR_polygon)` + U(lat)
-- [ ] Incidence angle estimator
-- [ ] Elevation angle estimator
+- [x] Incidence angle estimator `sar_incidence_angle` (IW + EW)
+- [x] Elevation angle estimator `sar_elevation_angle` (IW + EW)
 
 ## Development
 

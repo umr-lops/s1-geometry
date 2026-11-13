@@ -5,12 +5,12 @@ orbit direction; the four satellites agree within a fraction of a degree, so
 two pooled degree-4 polynomials (ascending / descending) describe the whole
 constellation. Fitted on 13 consecutive days of S1 IW OCN OWI data from all
 four satellites (11107 products, 44428 grid corners; fit window
-|lat| <= 70 deg, headings wrapped to the per-orbit median):
+\\|lat\\| <= 70 deg, headings wrapped to the per-orbit median):
 
 * ascending  : n = 4739, fit residual std 0.30 deg (p95 0.64)
 * descending : n = 5104, fit residual std 0.32 deg (p95 0.65)
 
-Beyond |lat| = 70 the polynomials extrapolate and the uncertainty model
+Beyond \\|lat\\| = 70 the polynomials extrapolate and the uncertainty model
 carries the extra error. Rare **turning** products at the polar turnaround
 receive a near-due-west heading of 270 deg (the satellite keeps its westward
 ground drift) with the large turning-latitude uncertainty.
@@ -126,9 +126,9 @@ def sar_ground_heading(
 def sar_ground_heading_uncertainty(ref_lat: float) -> float:
     """Latitude- and hemisphere-dependent heading uncertainty (deg).
 
-    Per hemisphere, the p95 of the |corner error| versus the degree-4 fit,
-    binned by |lat|: |lat| <= 70 is a degree-4 polynomial in |lat|;
-    |lat| > 70 is a piecewise-linear table on 1-deg bins, clamped at the
+    Per hemisphere, the p95 of the \\|corner error\\| versus the degree-4 fit,
+    binned by \\|lat\\|: \\|lat\\| <= 70 is a degree-4 polynomial in \\|lat\\|;
+    \\|lat\\| > 70 is a piecewise-linear table on 1-deg bins, clamped at the
     measured turning latitude (84.5 N / 77.5 S). Users can decide for
     themselves whether the heading of a given (high-latitude) acquisition is
     reliable instead of rejecting it.
