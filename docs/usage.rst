@@ -72,6 +72,12 @@ the IW model). Catalogue-oriented named functions are exported as well:
 * ``dfrac_of_point(sar_polygon, ref_lon, ref_lat)`` -- the across-track
   position of the point (0 = near range line, 1 = far range line).
 
+The reference point must lie **inside the SAFE footprint** (the 4-vertex
+parallelogram, boundary included).  ``estimate_incidence_elevation`` (and
+therefore ``estimate_geometry`` and the catalogue-oriented functions) raises
+a ``ValueError`` when the point is outside, instead of returning an
+extrapolated value.
+
 CLI
 ---
 

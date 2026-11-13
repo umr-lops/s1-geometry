@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from s1_geometry.footprint import (
     _as_point_array,
     orbit_direction_from_ring,
+    point_in_polygon,
 )
 from s1_geometry.heading import heading_from_lat
 
@@ -374,6 +375,37 @@ def dfrac_of_point(ring, ref_lon: float, ref_lat: float) -> float:
     return dfrac_of_point_from_lines(_range_lines(ring), ref_lon, ref_lat)
 
 
+def _ref_point_in_footprint(ring, ref_lon: float, ref_lat: float) -> bool:
+    """Whether the point lies inside (or on the boundary of) the SAFE
+    footprint.
+
+    The SAFE ring is a simple 4-vertex polygon.  It is only approximately a
+    parallelogram in (lon, lat) space (the range lines are arcs of constant
+    slant range on the sphere; the deviation from a parallelogram is ~0.1
+    deg for IW and ~0.6 deg for an EW ring at 70 deg S), so a barycentric
+    fraction test is not sufficient: a point exactly on the footprint
+    boundary must be checked against the ring edges themselves.  Boundary
+    points are *inside*: the near / far range lines lie on the ring edges
+    and are imaged.  Away from the boundary the test is a plain ray cast,
+    which is unambiguous.  The check is order-robust (any vertex order).
+    """
+    corners = _ring_corners(ring)
+    x, y = float(ref_lon), float(ref_lat)
+    for i in range(4):
+        ax, ay = corners[i]
+        bx, by = corners[(i + 1) % 4]
+        dx, dy = bx - ax, by - ay
+        norm2 = dx * dx + dy * dy
+        if norm2 == 0.0:
+            continue
+        u = ((x - ax) * dx + (y - ay) * dy) / norm2
+        if -1e-9 <= u <= 1.0 + 1e-9:
+            dist = math.hypot(x - ax - u * dx, y - ay - u * dy)
+            if dist <= 1e-5:  # ~1 m: the ring coordinates carry ~0.1 m
+                return True
+    return point_in_polygon(x, y, ring)
+
+
 # --------------------------------------------------------------------------- #
 # Full chain: footprint + reference point -> incidence & elevation
 # --------------------------------------------------------------------------- #
@@ -411,10 +443,17 @@ def estimate_incidence_elevation(
     Raises
     ------
     ValueError
-        If the mode is unknown, the ring is malformed, or the footprint
-        width does not invert to an orbit altitude in the documented band.
+        If the mode is unknown, the reference point is outside the SAFE
+        footprint, the ring is malformed, or the footprint width does not
+        invert to an orbit altitude in the documented band.
     """
     resolved_mode = _resolve_mode(mode)
+    if not _ref_point_in_footprint(sar_polygon, float(ref_lon), float(ref_lat)):
+        raise ValueError(
+            f"the reference point ({float(ref_lon):.4f}, {float(ref_lat):.4f}) "
+            f"is outside the SAFE footprint: the incidence / elevation angles "
+            f"cannot be computed outside the imaged area"
+        )
     lines = _range_lines(sar_polygon)
     dfrac = dfrac_of_point_from_lines(
         lines, float(ref_lon), float(ref_lat))

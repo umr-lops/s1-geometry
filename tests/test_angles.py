@@ -17,6 +17,7 @@ from s1_geometry import (
 )
 from s1_geometry.angles import (
     MODE_SIGMA,
+    _ref_point_in_footprint,
     deflection_of_vertical_deg,
     dfrac_of_point_from_lines,
     geocentric_radius_km,
@@ -139,6 +140,20 @@ def test_dfrac_at_range_line_midpoints():
     assert dfrac_of_point(ASC_RING, *mid_far) == pytest.approx(1.0, abs=1e-9)
 
 
+def test_ref_point_in_footprint_box():
+    box = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]
+    assert _ref_point_in_footprint(box, 0.3, 0.7)
+    # boundary points are inside (the range lines lie on the ring edges)
+    assert _ref_point_in_footprint(box, 0.0, 0.5)
+    assert _ref_point_in_footprint(box, 1.0, 0.5)
+    assert _ref_point_in_footprint(box, 0.5, 0.0)
+    assert _ref_point_in_footprint(box, 0.5, 1.0)
+    assert not _ref_point_in_footprint(box, 1.2, 0.5)
+    assert not _ref_point_in_footprint(box, -0.1, 0.5)
+    assert not _ref_point_in_footprint(box, 0.5, -0.2)
+    assert not _ref_point_in_footprint(box, 0.5, 1.3)
+
+
 # --------------------------------------------------------------------------- #
 # Full chain: footprint + reference point -> incidence & elevation
 # --------------------------------------------------------------------------- #
@@ -216,6 +231,28 @@ def test_estimate_accepts_a_geojson_string():
 # --------------------------------------------------------------------------- #
 # Error cases
 # --------------------------------------------------------------------------- #
+def test_estimate_rejects_a_point_outside_the_footprint():
+    clon, clat = _center(ASC_RING)
+    # a point 2 deg north of the center is outside the ~1.8 deg footprint
+    with pytest.raises(ValueError, match="outside the SAFE footprint"):
+        estimate_incidence_elevation(ASC_RING, clon, clat + 2.0, "IW")
+    with pytest.raises(ValueError, match="outside the SAFE footprint"):
+        estimate_incidence_elevation(ASC_RING, clon - 3.0, clat, "IW")
+    # the product-page CW ring is checked as well
+    with pytest.raises(ValueError, match="outside the SAFE footprint"):
+        estimate_incidence_elevation(
+            USER_DESC_RING_CW, clon, clat, "IW")
+
+
+def test_estimate_accepts_points_on_the_footprint_boundary():
+    # the near / far range lines lie on the ring edges and are imaged:
+    # boundary points must be accepted (a ray-casting test is inconsistent
+    # for them).
+    for i, j in ((0, 1), (1, 2), (2, 3), (3, 0)):
+        result = estimate_incidence_elevation(ASC_RING, *_midpoint(ASC_RING, i, j), "IW")
+        assert 0.0 <= result.dfrac <= 1.0
+
+
 def test_estimate_rejects_unknown_mode():
     clon, clat = _center(ASC_RING)
     with pytest.raises(ValueError, match="unknown mode"):
