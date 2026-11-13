@@ -5,10 +5,10 @@ import json
 
 import pytest
 
-from s1_geometry import S1Geometry, estimate_geometry
+from s1_geometry import S1Geometry, estimate_geometry, estimate_incidence_elevation
 from s1_geometry.footprint import ASCENDING, DESCENDING, TURNING
 from s1_geometry.heading import heading_from_lat, sar_ground_heading_uncertainty
-from tests.rings import ASC_RING, DESC_RING, TURN_RING
+from tests.rings import ASC_RING, DESC_RING, EW_RING, TURN_RING
 
 
 def test_estimate_geometry_explicit_reference_latitude():
@@ -58,3 +58,47 @@ def test_s1_geometry_is_a_frozen_dataclass():
     assert isinstance(result, S1Geometry)
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.heading_deg = 0.0  # type: ignore[misc]
+
+
+def test_estimate_geometry_without_mode_keeps_angles_none():
+    result = estimate_geometry(ASC_RING)
+    assert result.mode is None
+    assert result.incidence_deg is None
+    assert result.elevation_deg is None
+
+
+def test_estimate_geometry_with_mode_fills_the_angles():
+    result = estimate_geometry(ASC_RING, mode="IW")
+    assert result.mode == "IW"
+    assert result.incidence_deg is not None
+    assert result.elevation_deg == pytest.approx(90.0 - result.incidence_deg, abs=1e-12)
+
+
+def test_estimate_geometry_with_mode_uses_the_ring_center_by_default():
+    corners = ASC_RING[:4]
+    clon = sum(p[0] for p in corners) / 4.0
+    clat = sum(p[1] for p in corners) / 4.0
+    result = estimate_geometry(ASC_RING, mode="IW")
+    direct = estimate_incidence_elevation(ASC_RING, clon, clat, "IW")
+    assert result.ref_lat == pytest.approx(clat)
+    assert result.incidence_deg == pytest.approx(direct.incidence_deg, abs=1e-12)
+
+
+def test_estimate_geometry_with_mode_and_explicit_reference_point():
+    result = estimate_geometry(ASC_RING, ref_lon=-74.8, ref_lat=36.6, mode="IW")
+    direct = estimate_incidence_elevation(ASC_RING, -74.8, 36.6, "IW")
+    assert result.incidence_deg == pytest.approx(direct.incidence_deg, abs=1e-12)
+    assert result.elevation_deg == pytest.approx(direct.elevation_deg, abs=1e-12)
+
+
+def test_estimate_geometry_with_mode_accepts_ew():
+    result = estimate_geometry(EW_RING, mode="EW")
+    assert result.mode == "EW"
+    assert result.incidence_deg is not None
+
+
+def test_estimate_geometry_requires_lon_and_lat_together():
+    with pytest.raises(ValueError, match="together"):
+        estimate_geometry(ASC_RING, mode="IW", ref_lon=-74.8)
+    with pytest.raises(ValueError, match="together"):
+        estimate_geometry(ASC_RING, mode="IW", ref_lat=36.6)

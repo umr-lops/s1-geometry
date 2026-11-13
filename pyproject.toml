@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "s1-geometry"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tool to estimate geometric quantities (such as incidence, elevation or ground heading angle) from a Sentinel-1 SAR footprint."
 readme = "README.md"
 license = "MIT"

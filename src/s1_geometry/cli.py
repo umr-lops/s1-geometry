@@ -6,6 +6,12 @@ footprint polygon::
     s1-geometry heading footprint.geojson --lat 36.59
     s1-geometry heading '{"type": "Polygon", "coordinates": [[...]]}' --lat 36.59 --json
 
+or the incidence / elevation angles of an IW or EW acquisition at a
+reference point::
+
+    s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode IW
+    s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --json
+
 The polygon argument is a GeoJSON file path or an inline JSON string: a
 GeoJSON Polygon object, a GeoJSON Feature, or a bare ring of [lon, lat]
 vertices.
@@ -17,7 +23,7 @@ import argparse
 import json
 from pathlib import Path
 
-from s1_geometry import estimate_geometry
+from s1_geometry import estimate_geometry, estimate_incidence_elevation
 
 
 def _load_polygon(source: str) -> dict:
@@ -64,6 +70,31 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true", help="print the result as a JSON object",
     )
 
+    angles = sub.add_parser(
+        "angles",
+        help="estimate the incidence / elevation angles at a reference point",
+    )
+    angles.add_argument(
+        "polygon",
+        help="GeoJSON Polygon file path or inline JSON: a Polygon object, a "
+             "Feature, or a bare ring of [lon, lat] vertices",
+    )
+    angles.add_argument(
+        "--lon", type=float, required=True,
+        help="reference longitude in degrees",
+    )
+    angles.add_argument(
+        "--lat", type=float, required=True,
+        help="reference latitude in degrees",
+    )
+    angles.add_argument(
+        "--mode", choices=("IW", "EW"), default="IW",
+        help="imaging mode (default: IW)",
+    )
+    angles.add_argument(
+        "--json", action="store_true", help="print the result as a JSON object",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "heading":
@@ -84,6 +115,33 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ref_lat: {result.ref_lat:.6f}")
             print(f"heading_deg: {result.heading_deg:.3f}")
             print(f"heading_uncertainty_deg: {result.heading_uncertainty_deg:.3f}")
+    elif args.command == "angles":
+        try:
+            polygon = _load_polygon(args.polygon)
+            result = estimate_incidence_elevation(
+                polygon, args.lon, args.lat, args.mode)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            parser.error(f"cannot estimate the angles: {error}")
+        if args.json:
+            print(json.dumps({
+                "mode": result.mode,
+                "ref_lon": result.ref_lon,
+                "ref_lat": result.ref_lat,
+                "dfrac": result.dfrac,
+                "swath_width_km": result.swath_width_km,
+                "r_s_km": result.r_s_km,
+                "incidence_deg": result.incidence_deg,
+                "elevation_deg": result.elevation_deg,
+            }, indent=2))
+        else:
+            print(f"mode: {result.mode}")
+            print(f"ref_lon: {result.ref_lon:.6f}")
+            print(f"ref_lat: {result.ref_lat:.6f}")
+            print(f"dfrac: {result.dfrac:.4f}")
+            print(f"swath_width_km: {result.swath_width_km:.2f}")
+            print(f"r_s_km: {result.r_s_km:.2f}")
+            print(f"incidence_deg: {result.incidence_deg:.3f}")
+            print(f"elevation_deg: {result.elevation_deg:.3f}")
     return 0
 
 
