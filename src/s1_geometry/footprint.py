@@ -2,13 +2,17 @@
 
 The footprint of a Sentinel-1 IW/EW acquisition is the 4-vertex SAFE polygon
 (the ``GeoFootprint`` column of the CDSE daily Parquets, or the geometry of a
-matchup STAC item).  The orbit (pass) direction is derived from the ring
-here; see :func:`orbit_direction_from_ring` for the rule and the supported
-vertex-order conventions.
+matchup STAC item).  A WV acquisition instead imaged two subswaths in a
+sequence of bursts, so its ``GeoFootprint`` is a *MultiPolygon* of one small
+ring per burst; see :func:`as_multipolygon` and :mod:`s1_geometry.wv`.  The
+orbit (pass) direction of a ring is derived here; see
+:func:`orbit_direction_from_ring` for the rule and the supported vertex-order
+conventions.
 
 A ``ring`` / ``polygon`` can be passed anywhere in this package as a sequence
 of (lon, lat) vertices, a GeoJSON Polygon *string* or a GeoJSON Polygon
-*dict* (the STAC item representation).
+*dict* (the STAC item representation); a MultiPolygon is a GeoJSON
+MultiPolygon string / dict or a sequence of such rings.
 """
 
 from __future__ import annotations
@@ -48,6 +52,19 @@ _FAMILY_AMBIGUITY_TOL = 0.10
 #: An opposite-edge family shorter than this (km) is treated as degenerate.
 _DEGEN_FAMILY_KM = 2.0
 
+#: Across-track family length (km) band of the SM (stripmap) beams.  The
+#: attitude-steering law keeps every SM beam's ground swath fixed at ~80 km
+#: (independent of the orbit altitude), so an SM SAFE ring always carries one
+#: opposite-edge family of ~80 km (the across-track burst edges); the other
+#: family (the along-track range lines) is much longer (a few hundred km).
+_SM_BAND_LO_KM = 72.0
+_SM_BAND_HI_KM = 88.0
+
+#: Long / short opposite-edge family ratio below which an SM-like ring is
+#: treated as near-square instead (an SM burst shorter than ~15 s is nearly
+#: square and falls back to the standard-CDSE-order assumption).
+_SM_MIN_ASPECT_RATIO = 1.2
+
 
 def _as_point_array(ring: Sequence[Sequence[float]] | str | dict) -> np.ndarray:
     """Validate a polygon ring and return it as an (N, 2) (lon, lat) array."""
@@ -68,6 +85,52 @@ def _as_point_array(ring: Sequence[Sequence[float]] | str | dict) -> np.ndarray:
     if np.abs(points[:, 1]).max() > 90.0:
         raise ValueError(f"ring latitude out of range: {ring!r}")
     return points
+
+
+def as_multipolygon(
+    geom: Sequence[Sequence[Sequence[float]]] | str | dict,
+) -> list[np.ndarray]:
+    """Validate a MultiPolygon and return its (lon, lat) sub-polygon rings.
+
+    ``geom`` is a GeoJSON MultiPolygon *string* or *dict*, or a sequence of
+    rings (each a sequence of (lon, lat) vertices).  Returns a list of
+    ``(N_i, 2)`` (lon, lat) arrays, one per sub-polygon, in the given order.
+
+    For a WV acquisition the CDSE ``GeoFootprint`` is a MultiPolygon of one
+    small (~14 km) ring per burst; the ring order is the burst (time) order,
+    alternating between the two subswaths (see :mod:`s1_geometry.wv`).
+    """
+    if isinstance(geom, str):
+        try:
+            geom = json.loads(geom)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"not a valid GeoJSON MultiPolygon string: {error}") from error
+    if isinstance(geom, dict):
+        if geom.get("type") != "MultiPolygon":
+            raise ValueError(
+                f"expected a GeoJSON MultiPolygon, got type {geom.get('type')!r}")
+        coords = [poly[0] for poly in geom["coordinates"]]
+    else:
+        try:
+            coords = list(geom)
+        except TypeError as error:
+            raise ValueError(f"cannot interpret {geom!r} as a MultiPolygon") from error
+    if not coords:
+        raise ValueError("MultiPolygon has no sub-polygons")
+    rings: list[np.ndarray] = []
+    for i, ring in enumerate(coords):
+        points = np.asarray(ring, dtype=float)
+        if points.ndim != 2 or points.shape[1] != 2 or points.shape[0] < 3:
+            raise ValueError(
+                f"sub-polygon {i} must have at least 3 (lon, lat) vertices, "
+                f"got {ring!r}")
+        if not np.isfinite(points).all():
+            raise ValueError(f"sub-polygon {i} contains non-finite coordinates")
+        if np.abs(points[:, 1]).max() > 90.0:
+            raise ValueError(f"sub-polygon {i} latitude out of range")
+        rings.append(points)
+    return rings
 
 
 def _closed_ring_vertices(points: np.ndarray) -> list[tuple[float, float]]:
@@ -121,14 +184,22 @@ def orbit_direction_from_ring(
         across-track swath width, 248-274 km).  The flight runs parallel to the
         range lines: it is ``-e0`` when the range-line family is ``{e0, e2}``
         and ``+e1`` when it is ``{e1, e3}``.  The sign follows from the radar
-        being left-looking (the near range line is on the left of the flight);
-        for a ring in the standard CDSE vertex order this reduces exactly to
-        the historical dlat rule.
-    3.  EW-like rings (longest edge > 330 km) and rings whose two families are
+        being right-looking (the near range line is on the right of the
+        flight); for a ring in the standard CDSE vertex order this reduces
+        exactly to the historical dlat rule.
+    3.  For SM (stripmap) rings the situation is reversed: the attitude-
+        steering law keeps the beam's ground swath fixed at ~80 km, so the
+        across-track burst edges are the **shorter** family and the range
+        lines are the **longer** one (a few hundred km).  The SM ring is
+        detected by one family in the 72-88 km band and a long / short ratio
+        of at least 1.2; the flight is ``-e0`` when the range lines are
+        ``{e0, e2}`` (standard CDSE order) and ``-e1`` when they are
+        ``{e1, e3}`` (product-page order).
+    4.  EW-like rings (longest edge > 330 km) and rings whose two families are
         near-equal in length (relative difference < 10 %, e.g. near-square EW
         or RAW) are ambiguous: the standard CDSE vertex order is assumed and
         the flight is ``-e0`` (the historical dlat rule).
-    4.  The pass is :data:`ASCENDING` when the flight's north component
+    5.  The pass is :data:`ASCENDING` when the flight's north component
         exceeds +:data:`DLAT_TURN_THRESHOLD_DEG` deg latitude,
         :data:`DESCENDING` when it is below the negative threshold, and
         :data:`TURNING` otherwise (polar turnaround).
@@ -159,7 +230,22 @@ def orbit_direction_from_ring(
     lengths = np.linalg.norm(edges, axis=1)
     len02 = float(lengths[0] + lengths[2])
     len13 = float(lengths[1] + lengths[3])
+    short_km = 0.5 * min(len02, len13)
+    long_km = 0.5 * max(len02, len13)
     if (
+        _SM_BAND_LO_KM <= short_km <= _SM_BAND_HI_KM
+        and long_km >= _SM_MIN_ASPECT_RATIO * short_km
+    ):
+        # SM (stripmap) ring: the across-track burst edges are the ~80 km
+        # family, so the range lines are the LONG opposite-edge pair (the
+        # opposite of IW / EW, whose burst extent is shorter than the swath).
+        # In the standard CDSE (counter-clockwise) order the range lines are
+        # {e0, e2} (flight = -e0); in the product-page (clockwise) order they
+        # are {e1, e3} (flight = -e1).  Note: a partial-swath IW ring whose
+        # width falls in the SM band (e.g. an ~80 km IW30) in the product-page
+        # order is misclassified (the flight direction is flipped).
+        flight = -edges[0] if len02 > len13 else -edges[1]
+    elif (
         min(len02, len13) < _DEGEN_FAMILY_KM
         or float(lengths.max()) > _EW_LIKE_MAX_EDGE_KM
         or abs(len02 - len13) < _FAMILY_AMBIGUITY_TOL * max(len02, len13)

@@ -33,13 +33,19 @@ class S1Geometry:
         Latitude- and hemisphere-dependent heading uncertainty (deg); users
         decide instead of rejecting high-latitude acquisitions.
     mode:
-        Imaging mode (``"IW"`` or ``"EW"``) when the incidence / elevation
-        angles were estimated, otherwise ``None``.
+        Imaging mode (``"IW"``, ``"EW"`` or ``"SM"``) when the incidence /
+        elevation angles were estimated, otherwise ``None``.
+    beam:
+        SM beam (``"S1".."S6"``) when :attr:`mode` is ``"SM"``, otherwise
+        ``None``.  The SM chain is spec-based and not validated against ESA
+        L2 data (no SM L2 products in the archive).
     incidence_deg:
         Incidence angle (deg, from the local vertical) at the reference
         point, or ``None`` when :attr:`mode` is ``None``.
     elevation_deg:
-        Elevation angle (``90 - incidence``) at the reference point, or
+        Radar elevation angle at the reference point (the ESA L2 OCN
+        ``*ElevationAngle`` convention: the angle at the satellite between
+        nadir and the line of sight, equal to the off-nadir angle), or
         ``None`` when :attr:`mode` is ``None``.
     """
 
@@ -48,6 +54,7 @@ class S1Geometry:
     heading_deg: float
     heading_uncertainty_deg: float
     mode: str | None = None
+    beam: str | None = None
     incidence_deg: float | None = None
     elevation_deg: float | None = None
 
@@ -57,6 +64,7 @@ def estimate_geometry(
     ref_lat: float | None = None,
     mode: str | None = None,
     ref_lon: float | None = None,
+    beam: str | None = None,
 ) -> S1Geometry:
     """Estimate the geometric quantities of a Sentinel-1 acquisition.
 
@@ -70,14 +78,19 @@ def estimate_geometry(
         Reference latitude (deg) at which the heading is evaluated. Defaults
         to the mean latitude of the 4 footprint vertices.
     mode:
-        Imaging mode, ``"IW"`` or ``"EW"``.  When given, the incidence and
-        elevation angles are estimated at the reference point; the heading
-        fields remain the IW model (a documented extrapolation for EW).
+        Imaging mode, ``"IW"``, ``"EW"`` or ``"SM"``.  When given, the
+        incidence and elevation angles are estimated at the reference point;
+        the heading fields remain the IW model (a documented extrapolation
+        for EW / SM).
     ref_lon:
         Reference longitude (deg) of the point at which the incidence /
         elevation angles are evaluated.  Must be given together with
         ``ref_lat``; when both are omitted and ``mode`` is given, the
         footprint center (mean of the 4 vertices) is used.
+    beam:
+        SM beam (``"S1"`` to ``"S6"``, default ``"S3"``), used only when
+        ``mode="SM"``.  The SM chain is spec-based (documented off-nadir
+        bands) and not validated against ESA L2 data.
 
     Raises
     ------
@@ -103,13 +116,15 @@ def estimate_geometry(
     )
     if mode is None:
         return geometry
-    angles = estimate_incidence_elevation(sar_polygon, ref_lon, ref_lat, mode)
+    angles = estimate_incidence_elevation(
+        sar_polygon, ref_lon, ref_lat, mode, beam)
     return S1Geometry(
         orbit_direction=orbit,
         ref_lat=float(ref_lat),
         heading_deg=geometry.heading_deg,
         heading_uncertainty_deg=geometry.heading_uncertainty_deg,
         mode=angles.mode,
+        beam=angles.beam,
         incidence_deg=angles.incidence_deg,
         elevation_deg=angles.elevation_deg,
     )

@@ -48,3 +48,31 @@ ASC_RING_CW = [
     (-76.425255, 37.274273), (-73.591484, 37.671867),
     (-73.232109, 35.912037),
 ]
+
+# SM (stripmap) S3 SAFE rings, synthetic but physically consistent with the
+# constant-slant-range model at the mid-band reference distance (r_s =
+# 7082.7 km): a ~80 km across-track (burst-edge) family and a 300 km
+# along-track (range-line) family, at 40 N.  Standard CDSE (counter-
+# clockwise) and product-page (clockwise) vertex orders, both orbits.
+SM_ASC_RING = [
+    (-5.974582, 41.349042), (-5.974582, 38.650958),
+    (-5.033362, 38.650958), (-5.033362, 41.349042),
+    (-5.974582, 41.349042),
+]
+SM_DESC_RING = [
+    (-14.025418, 38.650958), (-14.025418, 41.349042),
+    (-14.966638, 41.349042), (-14.966638, 38.650958),
+    (-14.025418, 38.650958),
+]
+# SM_ASC_RING / SM_DESC_RING re-expressed in the product-page (clockwise)
+# vertex order.
+SM_ASC_RING_CW = [
+    (-5.033362, 41.349042), (-5.033362, 38.650958),
+    (-5.974582, 38.650958), (-5.974582, 41.349042),
+    (-5.033362, 41.349042),
+]
+SM_DESC_RING_CW = [
+    (-14.966638, 38.650958), (-14.966638, 41.349042),
+    (-5.974582, 41.349042), (-5.974582, 38.650958),
+    (-14.966638, 38.650958),
+]

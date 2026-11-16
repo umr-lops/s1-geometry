@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 project = "s1-geometry"
 copyright = "2026, LOPS Laboratory for Ocean Physics and Satellite remote sensing"
 author = "umr-lops"
-release = "0.1.0"
+release = "0.3.0"
 
 extensions = [
     "sphinx.ext.autodoc",

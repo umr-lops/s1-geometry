@@ -72,10 +72,13 @@ def test_angles_inline_geojson_json_output(capsys):
     result = json.loads(capsys.readouterr().out)
     assert result["mode"] == "IW"
     assert set(result) == {
-        "mode", "ref_lon", "ref_lat", "dfrac",
+        "mode", "beam", "ref_lon", "ref_lat", "dfrac",
         "swath_width_km", "r_s_km", "incidence_deg", "elevation_deg",
     }
-    assert result["elevation_deg"] == pytest.approx(90.0 - result["incidence_deg"])
+    assert result["beam"] is None  # IW: no SM beam
+    # radar elevation = off-nadir (ESA OCN convention), not 90 - incidence
+    assert result["elevation_deg"] != pytest.approx(90.0 - result["incidence_deg"], abs=0.1)
+    assert 25.0 <= result["elevation_deg"] <= 45.0
 
 
 def test_angles_ew_mode(capsys):

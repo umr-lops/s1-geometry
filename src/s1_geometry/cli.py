@@ -88,8 +88,12 @@ def main(argv: list[str] | None = None) -> int:
         help="reference latitude in degrees",
     )
     angles.add_argument(
-        "--mode", choices=("IW", "EW"), default="IW",
+        "--mode", choices=("IW", "EW", "SM"), default="IW",
         help="imaging mode (default: IW)",
+    )
+    angles.add_argument(
+        "--beam", choices=tuple(f"S{i}" for i in range(1, 7)), default=None,
+        help="SM beam S1..S6 (default: S3; used only with --mode SM)",
     )
     angles.add_argument(
         "--json", action="store_true", help="print the result as a JSON object",
@@ -119,12 +123,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             polygon = _load_polygon(args.polygon)
             result = estimate_incidence_elevation(
-                polygon, args.lon, args.lat, args.mode)
+                polygon, args.lon, args.lat, args.mode, args.beam)
         except (OSError, ValueError, json.JSONDecodeError) as error:
             parser.error(f"cannot estimate the angles: {error}")
         if args.json:
             print(json.dumps({
                 "mode": result.mode,
+                "beam": result.beam,
                 "ref_lon": result.ref_lon,
                 "ref_lat": result.ref_lat,
                 "dfrac": result.dfrac,
@@ -135,6 +140,8 @@ def main(argv: list[str] | None = None) -> int:
             }, indent=2))
         else:
             print(f"mode: {result.mode}")
+            if result.beam:
+                print(f"beam: {result.beam}")
             print(f"ref_lon: {result.ref_lon:.6f}")
             print(f"ref_lat: {result.ref_lat:.6f}")
             print(f"dfrac: {result.dfrac:.4f}")
