@@ -19,6 +19,10 @@ from tests.rings import (
     ASC_RING,
     ASC_RING_CW,
     DESC_RING,
+    SM_ASC_RING,
+    SM_ASC_RING_CW,
+    SM_DESC_RING,
+    SM_DESC_RING_CW,
     TURN_RING,
     USER_DESC_RING_CW,
 )
@@ -36,6 +40,13 @@ from tests.rings import (
         # as a bug (CDSE product page, ~47 N)
         (USER_DESC_RING_CW, DESCENDING),
         (ASC_RING_CW, ASCENDING),
+        # SM (stripmap) rings: the range lines are the LONG opposite-edge
+        # pair (the across-track burst edges are the ~80 km family), the
+        # opposite of IW / EW
+        (SM_ASC_RING, ASCENDING),
+        (SM_DESC_RING, DESCENDING),
+        (SM_ASC_RING_CW, ASCENDING),
+        (SM_DESC_RING_CW, DESCENDING),
     ],
 )
 def test_orbit_direction_from_ring(ring, expected):

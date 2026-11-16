@@ -1,6 +1,6 @@
 """S1 **IW/EW** SAR incidence and elevation angles from the SAFE footprint.
 
-The radar is left-looking and steered to a quasi-constant off-nadir angle
+The radar is right-looking and steered to a quasi-constant off-nadir angle
 ``sigma`` per sub-swath (the design goal is a quasi-constant incidence /
 ground swath over the orbit).  Two consistent models are combined
 (verified against the ESA / SentiWiki documented angles to <= 0.07 deg):
@@ -18,17 +18,23 @@ ground swath over the orbit).  Two consistent models are combined
   min/max-altitude values per sub-swath), the geocentric incidence is the
   closed form ``theta_c = asin[(R_s/R_e) * sin(sigma)]``.  The local
   (ellipsoid-normal) incidence adds the deflection of the vertical
-  (max ~0.19 deg near \\|lat\\| = 45 deg), and the elevation is exactly
-  ``90 deg - incidence``.
+  (max ~0.19 deg near \\|lat\\| = 45 deg).  The **radar elevation angle**
+  (the ESA L2 OCN ``*ElevationAngle`` convention: the angle at the satellite
+  between nadir and the line of sight) is exactly the off-nadir angle
+  ``sigma`` (equivalently ``incidence - gamma``, ``gamma`` being the
+  sub-satellite to target central angle; the triangle angle sum gives
+  ``sigma = incidence - gamma``).
 
 The across-track width ``W`` is the spherical distance (6371 km sphere)
-between the midpoints of the two range lines of the 4-vertex SAFE ring.  In
-the standard CDSE vertex order (GRDH/GRDM/SLC/OCN), the range lines are the
-``v0-v1`` (far) and ``v2-v3`` (near) edges, for ascending and descending
-alike; rings with a rotated vertex order (e.g. ETA) fall back to the other
-edge pair when the standard width does not invert to a valid orbit
-altitude.  Validated on 66243 CDSE IW/EW rings: 98.9 % (IW) and 90.8 % (EW)
-of the products invert an altitude in the documented 697.6 to 725.8 km band;
+between the midpoints of the two range lines of the 4-vertex SAFE ring.  The
+range lines are the two across-track edges of the parallelogram; for the
+standard CDSE vertex order they are the ``v0-v1`` and ``v2-v3`` edges, and
+which of the two is the near range line is resolved from the right-looking
+geometry (the near range line is the one on the ground-track side).  Rings
+with a rotated vertex order (e.g. ETA) fall back to the other edge pair when
+the standard width does not invert to a valid orbit altitude.  Validated on
+66243 CDSE IW/EW rings: 98.9 % (IW) and 90.8 % (EW) of the products invert an
+altitude in the documented 697.6 to 725.8 km band;
 the full chain (ring -> W -> R_s -> incidence) is simulated to <= 0.11 deg
 (IW) and <= 0.05 deg (EW) maximum error (SOBA SAR-metadata retrieval,
 2026-11-13).
@@ -62,6 +68,14 @@ R_E_KM = 6371.0
 R_S_MIN_KM = R_E_KM + 697.6
 R_S_MAX_KM = R_E_KM + 725.8
 
+#: Reference satellite geocentric distance (km) for the **SM** (stripmap)
+#: chain.  The SM ground swath is (by design of the attitude-steering law)
+#: nearly independent of the orbit altitude, so the footprint width does not
+#: determine ``R_s``; the SM angles are evaluated at this mid-band reference
+#: distance, which carries an intrinsic ~ +/-0.8 deg incidence uncertainty
+#: over the documented altitude band.
+R_S_REF_SM_KM = R_E_KM + 0.5 * (697.6 + 725.8)
+
 #: Bisection search box for the W -> R_s inversion (km): the documented band
 #: plus a margin, so that a width slightly outside the band still inverts
 #: (the result is then rejected by the band check, which triggers the
@@ -81,6 +95,42 @@ MODE_SIGMA = {
     "EW": (17.94, 16.36, 41.20, 39.62),
 }
 
+#: Documented off-nadir angles (deg) for the **SM** (stripmap) beams, one entry
+#: per beam: ``(near-min, near-max, far-min, far-max)`` at min / max orbit
+#: altitude (ESA User Handbook, "Stripmap" table).  An SM image is acquired
+#: with a *single* beam ``S1..S6``; the imaged swath runs from that beam's
+#: near to far off-nadir edge.  Unlike IW / EW these bands are **not**
+#: calibrated against ESA L2 OCN products: no SM L2 products exist in the CDSE
+#: archive (2014-2026), so the SM chain is spec-based only and *not validated*
+#: against L2 data.
+SM_BEAM_SIGMA = {
+    "S1": (17.93, 16.45, 23.53, 21.96),
+    "S2": (21.00, 19.51, 26.33, 24.77),
+    "S3": (26.18, 24.67, 30.99, 29.45),
+    "S4": (30.87, 29.34, 35.15, 33.63),
+    "S5": (35.07, 33.53, 38.85, 37.34),
+    "S6": (37.53, 35.98, 41.01, 39.51),
+}
+
+
+def _sigma_constants(
+    mode: str, beam: str | None = None,
+) -> tuple[float, float, float, float]:
+    """The ``(near-min, near-max, far-min, far-max)`` off-nadir band for a mode.
+
+    ``beam`` selects the SM beam (``"S1".."S6"``, default ``"S3"``); it is
+    ignored for IW / EW, whose near / far edges are fixed (IW1/IW3, EW1/EW5).
+    """
+    if mode in MODE_SIGMA:
+        return MODE_SIGMA[mode]
+    if mode == "SM":
+        b = (beam or "S3").upper()
+        if b not in SM_BEAM_SIGMA:
+            raise ValueError(
+                f"unknown SM beam {beam!r} (expected one of S1..S6)")
+        return SM_BEAM_SIGMA[b]
+    raise ValueError(f"unknown mode: {mode!r} (expected 'IW', 'EW' or 'SM')")
+
 
 @dataclass(frozen=True)
 class S1Angles:
@@ -89,7 +139,11 @@ class S1Angles:
     Attributes
     ----------
     mode:
-        Imaging mode, ``"IW"`` or ``"EW"``.
+        Imaging mode, ``"IW"``, ``"EW"`` or ``"SM"``.
+    beam:
+        SM beam (``"S1".."S6"``) when :attr:`mode` is ``"SM"``, otherwise
+        ``None``.  The SM chain is spec-based (documented off-nadir bands) and
+        not validated against ESA L2 data (no SM L2 products in the archive).
     ref_lon, ref_lat:
         Reference point (deg) at which the angles are evaluated.
     dfrac:
@@ -103,8 +157,15 @@ class S1Angles:
     incidence_deg:
         Incidence angle at the reference point, measured from the local
         (ellipsoid) vertical, in degrees.
+    off_nadir_deg:
+        Off-nadir (radar steering) angle at the reference point, in degrees:
+        the linear roll law between the documented near / far sub-swath values
+        interpolated by :attr:`dfrac`.
     elevation_deg:
-        Elevation angle, ``90 - incidence`` (exact), in degrees.
+        Radar elevation angle, the ESA L2 OCN ``*ElevationAngle`` convention:
+        the angle at the satellite between nadir and the line of sight, which
+        equals the off-nadir angle :attr:`off_nadir_deg` (equivalently
+        ``incidence - gamma``), in degrees.
     """
 
     mode: str
@@ -114,7 +175,9 @@ class S1Angles:
     swath_width_km: float
     r_s_km: float
     incidence_deg: float
+    off_nadir_deg: float
     elevation_deg: float
+    beam: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -180,16 +243,16 @@ def slant_from_incidence(theta_deg: float, r_s_km: float, r_e_km: float) -> floa
 
 
 def mode_slant_ranges(mode: str, r_s_km: float = R_S_MIN_KM,
-                      r_e_km: float = R_E_KM) -> tuple[float, float]:
+                      r_e_km: float = R_E_KM,
+                      beam: str | None = None) -> tuple[float, float]:
     """Near / far sub-swath slant ranges (km) for a mode.
 
     Derived from the documented min-altitude off-nadir angles (near and far
     sub-swath edges); the slant ranges are properties of the pointing and
-    of ``r_s_km`` only.
+    of ``r_s_km`` only.  For ``mode="SM"`` the beam (``"S1".."S6"``, default
+    ``"S3"``) selects the band.
     """
-    if mode not in MODE_SIGMA:
-        raise ValueError(f"unknown mode: {mode!r} (expected 'IW' or 'EW')")
-    sn_min, _, sf_min, _ = MODE_SIGMA[mode]
+    sn_min, _, sf_min, _ = _sigma_constants(mode, beam)
     th_n = incidence_offnadir_deg(r_s_km, r_e_km, sn_min)
     th_f = incidence_offnadir_deg(r_s_km, r_e_km, sf_min)
     if th_n is None or th_f is None:
@@ -271,10 +334,12 @@ def swath_width_km(ring) -> float:
 
     The spherical distance (6371 km sphere, the CDSE catalogue convention)
     between the midpoints of the two range lines.  In the standard CDSE
-    vertex order the range lines are the ``v0-v1`` (far) and ``v2-v3``
-    (near) edges; a ring whose standard-order width does not invert to an
-    orbit altitude in the documented band is assumed to use a rotated
-    vertex order (e.g. ETA) and the other edge pair is used instead.
+    vertex order the range lines are the ``v0-v1`` and ``v2-v3`` edges; a
+    ring whose standard-order width does not invert to an orbit altitude in
+    the documented band is assumed to use a rotated vertex order (e.g. ETA)
+    and the other edge pair is used instead.  Which of the two is the near
+    range line is resolved from the right-looking geometry (see
+    :func:`_near_far_from_look`).
     """
     return _range_lines(ring)["width_km"]
 
@@ -303,12 +368,10 @@ def _range_lines(ring) -> dict:
         r_s = _invert_width(width)
         if r_s is None or not (R_S_MIN_KM <= r_s <= R_S_MAX_KM):
             continue
-        if label == "standard":
-            # standard CDSE order: v2-v3 is the near range line, v0-v1 the
-            # far one, for ascending and descending alike (left-looking).
-            near, far = mid_b, mid_a
-        else:
-            near, far = _near_far_from_look(ring, mid_a, mid_b)
+        # The near / far ordering is the same for every vertex order: the
+        # right-looking radar puts the near range line on the ground-track
+        # side and the far range line furthest along the look direction.
+        near, far = _near_far_from_look(ring, mid_a, mid_b)
         return {"width_km": width, "near_mid": near, "far_mid": far,
                 "r_s_km": r_s, "label": label}
     raise ValueError(
@@ -321,36 +384,61 @@ def _range_lines(ring) -> dict:
     )
 
 
+def _sm_width_band_km() -> tuple[float, float]:
+    """Across-track width (km) range of the SM beams over the altitude band.
+
+    Each SM beam is imaged alone and the attitude-steering law keeps its
+    ground swath fixed, so every beam inverts to a nearly altitude-invariant
+    width (~80 km).  The band is the min / max over all beams at the min and
+    max orbit altitude, with a small margin for model / product variation.
+    """
+    widths = []
+    for beam in SM_BEAM_SIGMA:
+        sn_min, sn_max, sf_min, sf_max = SM_BEAM_SIGMA[beam]
+        for r_s in (R_S_MIN_KM, R_S_MAX_KM):
+            rn = mode_slant_ranges("SM", r_s, R_E_KM, beam)[0]
+            rf = mode_slant_ranges("SM", r_s, R_E_KM, beam)[1]
+            widths.append(width_const_slant_km(r_s, R_E_KM, rn, rf))
+    return min(widths) - 2.0, max(widths) + 2.0
+
+
 def _invert_width(width_km: float) -> float | None:
     """Invert a candidate width to a satellite geocentric distance (km).
 
-    The mode is not known from the ring alone, but the IW and EW width bands
-    ([~248, ~271] km and [~412, ~486] km) are disjoint, so the width is
-    inverted against both mode models and the candidate is accepted when it
-    falls in the documented altitude band for either mode.
+    The mode is not known from the ring alone.  The IW and EW widths invert
+    to an orbit altitude by bisection (disjoint bands, [~248, ~271] km and
+    [~412, ~486] km).  The SM beams carry a nearly altitude-invariant width
+    (~80 km), so the SM width does not invert to an altitude; any width in
+    the SM band is accepted and maps to the reference distance
+    :data:`R_S_REF_SM_KM` (see :func:`_sm_width_band_km`).
     """
     for mode in MODE_SIGMA:
         r_near, r_far = mode_slant_ranges(mode)
         r_s = solve_rs_from_width(width_km, R_E_KM, r_near, r_far)
         if r_s is not None and R_S_MIN_KM <= r_s <= R_S_MAX_KM:
             return r_s
+    sm_lo, sm_hi = _sm_width_band_km()
+    if sm_lo <= width_km <= sm_hi:
+        return R_S_REF_SM_KM
     return None
 
 
 def _near_far_from_look(
     ring, mid_a: tuple[float, float], mid_b: tuple[float, float],
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Order two range-line midpoints into (near, far) for a rotated ring.
+    """Order two range-line midpoints into (near, far).
 
-    The radar is left-looking: the footprint extends from the ground track
-    along the look direction (left of the flight heading).  The near range
-    line is the one closest to the track, i.e. with the smallest projection
-    on the look direction.
+    Sentinel-1 is a *right-looking* radar: the footprint extends from the
+    ground track along the look direction (right of the flight heading).
+    The near range line is the one closest to the track, i.e. with the
+    smallest projection on the look direction (the far range line lies
+    furthest along it).  Validated against the per-pixel incidence angles
+    of ESA OCN products (the near edge carries the lowest incidence).
     """
     mean_lat = float(sum(vertex[1] for vertex in _ring_corners(ring)) / 4.0)
     orbit = orbit_direction_from_ring(ring)
     heading = math.radians(heading_from_lat(mean_lat, orbit))
-    look = (-math.cos(heading), math.sin(heading))  # (east, north), left of flight
+    look = (math.cos(heading), -math.sin(heading))  # (east, north), right of flight
     proj = [mid[0] * look[0] + mid[1] * look[1] for mid in (mid_a, mid_b)]
     if proj[0] <= proj[1]:
         return mid_a, mid_b
@@ -412,13 +500,15 @@ def _ref_point_in_footprint(ring, ref_lon: float, ref_lat: float) -> bool:
 def _resolve_mode(mode: str | None) -> str:
     if mode is None:
         return "IW"
-    if mode not in MODE_SIGMA:
-        raise ValueError(f"unknown mode: {mode!r} (expected 'IW' or 'EW')")
+    if mode not in ("IW", "EW", "SM"):
+        raise ValueError(
+            f"unknown mode: {mode!r} (expected 'IW', 'EW' or 'SM')")
     return mode
 
 
 def estimate_incidence_elevation(
     sar_polygon, ref_lon: float, ref_lat: float, mode: str | None = None,
+    beam: str | None = None,
 ) -> S1Angles:
     """Estimate the incidence / elevation angles of an S1 acquisition.
 
@@ -432,7 +522,18 @@ def estimate_incidence_elevation(
         Reference point (deg) at which the angles are evaluated (typically
         a point inside the footprint).
     mode:
-        Imaging mode, ``"IW"`` (default) or ``"EW"``.
+        Imaging mode, ``"IW"`` (default), ``"EW"`` or ``"SM"``.
+    beam:
+        SM beam (``"S1"`` to ``"S6"``, default ``"S3"``), used only when
+        ``mode="SM"``: an SM image is acquired with a single beam and the
+        across-track sigma runs from that beam's near to far off-nadir edge.
+        Ignored for IW / EW.
+
+        .. note::
+
+           The SM off-nadir bands are the documented (spec) values; the SM
+           chain is **not validated against ESA L2 OCN data** (no SM L2
+           products exist in the CDSE archive).
 
     Returns
     -------
@@ -443,9 +544,9 @@ def estimate_incidence_elevation(
     Raises
     ------
     ValueError
-        If the mode is unknown, the reference point is outside the SAFE
-        footprint, the ring is malformed, or the footprint width does not
-        invert to an orbit altitude in the documented band.
+        If the mode or SM beam is unknown, the reference point is outside
+        the SAFE footprint, the ring is malformed, or the footprint width
+        does not invert to an orbit altitude in the documented band.
     """
     resolved_mode = _resolve_mode(mode)
     if not _ref_point_in_footprint(sar_polygon, float(ref_lon), float(ref_lat)):
@@ -460,16 +561,33 @@ def estimate_incidence_elevation(
     # The band check in _range_lines is mode-agnostic; re-invert with the
     # requested mode, so that a width valid for one mode but not the
     # requested one (e.g. an EW ring passed with mode="IW") is an error.
-    r_near, r_far = mode_slant_ranges(resolved_mode)
-    r_s = solve_rs_from_width(lines["width_km"], R_E_KM, r_near, r_far)
+    # SM is the exception: its ground swath is nearly altitude-invariant
+    # (the attitude-steering law keeps the beam's ground band fixed), so
+    # the width does not invert to an orbit altitude by bisection; the band
+    # check in _range_lines already mapped the width to the reference
+    # distance R_S_REF_SM_KM (intrinsic ~ +/-0.8 deg altitude ambiguity).
+    if resolved_mode == "SM":
+        sm_lo, sm_hi = _sm_width_band_km()
+        if not (sm_lo <= lines["width_km"] <= sm_hi):
+            raise ValueError(
+                f"the footprint width {lines['width_km']:.1f} km is not in "
+                f"the SM band ({sm_lo:.1f} to {sm_hi:.1f} km): an SM image "
+                f"is acquired with a single beam (S1..S6), so its ground "
+                f"swath is much narrower than an IW / EW swath"
+            )
+        r_s = lines["r_s_km"]
+    else:
+        r_near, r_far = mode_slant_ranges(resolved_mode)
+        r_s = solve_rs_from_width(lines["width_km"], R_E_KM, r_near, r_far)
     if r_s is None or not (R_S_MIN_KM <= r_s <= R_S_MAX_KM):
         raise ValueError(
             f"the footprint width {lines['width_km']:.1f} km does not "
             f"invert to an orbit altitude in the 697.6 to 725.8 km band "
             f"for mode {resolved_mode!r}"
+            + (f" beam {beam!r}" if resolved_mode == "SM" else "")
         )
 
-    sn_min, sn_max, sf_min, sf_max = MODE_SIGMA[resolved_mode]
+    sn_min, sn_max, sf_min, sf_max = _sigma_constants(resolved_mode, beam)
     sigma = sigma_of_r_s(sn_min, sn_max, r_s) + dfrac * (
         sigma_of_r_s(sf_min, sf_max, r_s) - sigma_of_r_s(sn_min, sn_max, r_s)
     )
@@ -481,6 +599,9 @@ def estimate_incidence_elevation(
             f"does not reach the ground at R_e = {r_e_ref:.1f} km"
         )
     incidence = theta_gc + deflection_of_vertical_deg(float(ref_lat))
+    # The radar elevation angle (ESA OCN convention) is the off-nadir angle
+    # sigma: the triangle angle sum gives sigma = incidence - gamma exactly.
+    out_beam = (beam or "S3").upper() if resolved_mode == "SM" else None
     return S1Angles(
         mode=resolved_mode,
         ref_lon=float(ref_lon),
@@ -489,31 +610,39 @@ def estimate_incidence_elevation(
         swath_width_km=lines["width_km"],
         r_s_km=r_s,
         incidence_deg=incidence,
-        elevation_deg=90.0 - incidence,
+        off_nadir_deg=sigma,
+        elevation_deg=sigma,
+        beam=out_beam,
     )
 
 
 def sar_incidence_angle(
     sar_polygon, ref_lon: float, ref_lat: float, mode: str | None = None,
+    beam: str | None = None,
 ) -> float:
     """Incidence angle (deg, from the local vertical) of an S1 acquisition
     at the reference point.
 
-    This is the function behind the ``sar_incidence_angle`` column of the
-    SAR catalogues.  See :func:`estimate_incidence_elevation`.
+    ``beam`` selects the SM beam when ``mode="SM"``.  This is the function
+    behind the ``sar_incidence_angle`` column of the SAR catalogues.  See
+    :func:`estimate_incidence_elevation`.
     """
     return estimate_incidence_elevation(
-        sar_polygon, ref_lon, ref_lat, mode).incidence_deg
+        sar_polygon, ref_lon, ref_lat, mode, beam).incidence_deg
 
 
 def sar_elevation_angle(
     sar_polygon, ref_lon: float, ref_lat: float, mode: str | None = None,
+    beam: str | None = None,
 ) -> float:
-    """Elevation angle (deg, ``90 - incidence``) of an S1 acquisition at the
-    reference point.
+    """Radar elevation angle (deg) of an S1 acquisition at the reference
+    point.
 
-    This is the function behind the ``sar_elevation_angle`` column of the
-    SAR catalogues.  See :func:`estimate_incidence_elevation`.
+    ``beam`` selects the SM beam when ``mode="SM"``.  The ESA L2 OCN
+    ``*ElevationAngle`` convention: the angle at the satellite between nadir
+    and the line of sight, equal to the off-nadir (steering) angle.  This is
+    the function behind the ``sar_elevation_angle`` column of the SAR
+    catalogues.  See :func:`estimate_incidence_elevation`.
     """
     return estimate_incidence_elevation(
-        sar_polygon, ref_lon, ref_lat, mode).elevation_deg
+        sar_polygon, ref_lon, ref_lat, mode, beam).elevation_deg

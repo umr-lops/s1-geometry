@@ -71,7 +71,9 @@ def test_estimate_geometry_with_mode_fills_the_angles():
     result = estimate_geometry(ASC_RING, mode="IW")
     assert result.mode == "IW"
     assert result.incidence_deg is not None
-    assert result.elevation_deg == pytest.approx(90.0 - result.incidence_deg, abs=1e-12)
+    # radar elevation = off-nadir (ESA OCN convention), not 90 - incidence
+    assert result.elevation_deg != pytest.approx(90.0 - result.incidence_deg, abs=0.1)
+    assert 25.0 <= result.elevation_deg <= 45.0
 
 
 def test_estimate_geometry_with_mode_uses_the_ring_center_by_default():
