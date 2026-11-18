@@ -38,9 +38,21 @@ validation against the ESA L2 OCN products.
 
 Test suite: ``python -m pytest -q``.
 
+.. image:: _static/figures/iw_example.png
+   :align: center
+   :width: 100%
+   :alt: IW example — ESA L2 OCN (owi) values, s1-geometry estimates, error
+        and model-vs-data scatter
+
+One IW example: the ESA L2 OCN (``owi``) angle fields, the s1-geometry
+estimates and the error, one row per angle.  See :doc:`figures` for one
+example per mode (IW, EW, WV, SM) and the error vs latitude for the
+centre and corners of the SAR image.
+
 .. toctree::
    :maxdepth: 2
 
    usage
+   figures
    certification
    api/s1_geometry
