@@ -196,9 +196,17 @@ def orbit_direction_from_ring(
         ``{e0, e2}`` (standard CDSE order) and ``-e1`` when they are
         ``{e1, e3}`` (product-page order).
     4.  EW-like rings (longest edge > 330 km) and rings whose two families are
-        near-equal in length (relative difference < 10 %, e.g. near-square EW
-        or RAW) are ambiguous: the standard CDSE vertex order is assumed and
-        the flight is ``-e0`` (the historical dlat rule).
+        near-equal in length (relative difference < 10 %, e.g. a near-square
+        IW or EW ring) are ambiguous from the edge lengths alone: the
+        range-line family is decided from the two candidate across-track
+        widths (see :func:`_orbit_range_line_family` in :mod:`angles`).  When
+        the widths are clearly separated (e.g. an EW ring) the width-inversion
+        family (the same discriminator as :func:`swath_width_km`) is used; when
+        they are a near-square knife-edge (a few km apart, e.g. a near-square
+        IW ring) the flight-parallel family is the one with the larger
+        north-south extent.  When the width does not invert to an orbit
+        altitude (degenerate or partial-swath ring) the standard CDSE vertex
+        order is assumed and the flight is ``-e0`` (the historical dlat rule).
     5.  The pass is :data:`ASCENDING` when the flight's north component
         exceeds +:data:`DLAT_TURN_THRESHOLD_DEG` deg latitude,
         :data:`DESCENDING` when it is below the negative threshold, and
@@ -251,8 +259,20 @@ def orbit_direction_from_ring(
         or abs(len02 - len13) < _FAMILY_AMBIGUITY_TOL * max(len02, len13)
     ):
         # Degenerate, EW-like or near-square ring: the along-track family is
-        # not identifiable, assume the standard CDSE vertex order.
-        flight = -edges[0]
+        # not identifiable from the edge lengths alone.  Decide it by the
+        # across-track widths (see :func:`_orbit_range_line_family`): width
+        # inversion when the two family widths are clearly separated (e.g. EW),
+        # else the flight-parallel (north-south) family for a near-square
+        # knife-edge.  Fall back to the standard CDSE vertex order (flight =
+        # -e0) when the width does not invert to an orbit altitude (degenerate
+        # / partial-swath ring).  The import is lazy because angles.py imports
+        # footprint.py at module level.
+        try:
+            from s1_geometry.angles import _orbit_range_line_family
+            family = _orbit_range_line_family(ring)
+        except Exception:  # keep the historical -e0 behaviour, never crash
+            family = "standard"
+        flight = -edges[0] if family == "standard" else edges[1]
     elif len02 < len13:
         # {e0, e2} is the range-line family (parallel to the flight).
         flight = -edges[0]

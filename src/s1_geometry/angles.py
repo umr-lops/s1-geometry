@@ -82,6 +82,15 @@ R_S_REF_SM_KM = R_E_KM + 0.5 * (697.6 + 725.8)
 #: rotated-ring fallback).
 _R_S_BOX = (R_S_MIN_KM - 40.0, R_S_MAX_KM + 40.0)
 
+#: Across-track width separation (km) below which the two candidate range-line
+#: families are a "knife-edge" for the orbit-direction rule: the width
+#: inversion can no longer tell them apart (both invert, or one is just outside
+#: the band), so the flight-parallel (north-south) family is used instead.  For
+#: near-square IW footprints the two widths differ by only a few km (~250 vs
+#: ~253 km) whereas a real across-track / along-track split (e.g. EW) differs by
+#: tens to hundreds of km, so a small absolute margin is safe.
+_ORBIT_KNIFE_EDGE_KM = 5.0
+
 #: WGS84 ellipsoid.
 WGS84_A = 6378137.0
 WGS84_F = 1.0 / 298.257223563
@@ -344,18 +353,28 @@ def swath_width_km(ring) -> float:
     return _range_lines(ring)["width_km"]
 
 
-def _range_lines(ring) -> dict:
-    """Identify the range lines of the SAFE ring.
+def _range_line_family(ring) -> str:
+    """Return the range-line family of the SAFE ring.
 
-    Returns ``{"width_km", "near_mid", "far_mid"}`` with the across-track
-    width and the (lon, lat) midpoints of the near / far range lines.
+    ``"standard"`` when the range lines are the ``v0-v1`` / ``v2-v3`` edges
+    (the standard CDSE vertex order) and ``"rotated"`` when they are the
+    ``v1-v2`` / ``v3-v0`` edges (a rotated order such as ETA or the
+    product-page order).
+
+    The family is decided by width inversion: the range-line family is the
+    one whose across-track width inverts to an orbit altitude in the
+    documented band (or, for SM, to the SM width band).  This is the same
+    discriminator :func:`swath_width_km` uses and it stays correct for
+    near-square footprints, where the edge lengths of the two families are
+    too close to tell them apart.  Unlike :func:`_range_lines` it does not
+    resolve the near / far ordering, so it can be called from
+    ``orbit_direction_from_ring`` without recursing back into it.
 
     Raises
     ------
     ValueError
-        If neither edge pair inverts to an orbit altitude in the documented
-        band (partial-swath footprint, unknown ring convention, or a width
-        outside the 697.6 to 725.8 km altitude reach).
+        If neither edge pair inverts in band (partial-swath footprint or an
+        unknown ring convention).
     """
     corners = _ring_corners(ring)
     v0, v1, v2, v3 = corners
@@ -366,22 +385,92 @@ def _range_lines(ring) -> dict:
     for label, mid_a, mid_b in candidates:
         width = _spherical_km(mid_a, mid_b)
         r_s = _invert_width(width)
-        if r_s is None or not (R_S_MIN_KM <= r_s <= R_S_MAX_KM):
-            continue
-        # The near / far ordering is the same for every vertex order: the
-        # right-looking radar puts the near range line on the ground-track
-        # side and the far range line furthest along the look direction.
-        near, far = _near_far_from_look(ring, mid_a, mid_b)
-        return {"width_km": width, "near_mid": near, "far_mid": far,
-                "r_s_km": r_s, "label": label}
+        if r_s is not None and R_S_MIN_KM <= r_s <= R_S_MAX_KM:
+            return label
     raise ValueError(
         "the SAFE footprint width does not invert to an orbit altitude in "
-        f"the documented 697.6 to 725.8 km band (standard width "
-        f"{_spherical_km(_edge_midpoint(v0, v1), _edge_midpoint(v2, v3)):.1f} "
-        f"km, rotated width "
-        f"{_spherical_km(_edge_midpoint(v1, v2), _edge_midpoint(v3, v0)):.1f} "
-        "km): partial-swath footprint or unknown ring convention"
+        "the documented band: no range-line family identified "
+        "(partial-swath footprint or unknown ring convention)"
     )
+
+
+def _orbit_range_line_family(ring) -> str:
+    """Decide the range-line family for the orbit-direction rule.
+
+    For a near-square footprint the two edge families are too close in length
+    to tell apart, so the family is decided from the two candidate across-track
+    widths (the distance between the midpoints of each opposite-edge pair):
+
+    * when the widths are clearly separated (>= :data:`_ORBIT_KNIFE_EDGE_KM`,
+      e.g. an EW ring whose across-track swath is far from its along-track
+      extent) the width-inversion family :func:`_range_line_family` is used;
+    * when they are a knife-edge (< :data:`_ORBIT_KNIFE_EDGE_KM`, e.g. a
+      near-square IW ring, ~250 vs ~253 km) the flight-parallel family is the
+      one more aligned with the orbit, i.e. with the larger north-south extent
+      (the Sentinel-1 orbit runs north-south away from the polar turn).  This
+      is what resolves the near-square IW rings whose width is just below the
+      inverting band, where the width inversion alone is a knife-edge.
+
+    Raises
+    ------
+    ValueError
+        Like :func:`_range_line_family`, if the widths are clearly separated
+        but neither inverts in band (partial-swath footprint or unknown ring
+        convention).
+    """
+    v0, v1, v2, v3 = _ring_corners(ring)
+    std_w = _spherical_km(_edge_midpoint(v0, v1), _edge_midpoint(v2, v3))
+    rot_w = _spherical_km(_edge_midpoint(v1, v2), _edge_midpoint(v3, v0))
+    if abs(std_w - rot_w) >= _ORBIT_KNIFE_EDGE_KM:
+        return _range_line_family(ring)
+    # Knife-edge: the flight-parallel (range-line) family is the one with the
+    # larger north-south extent (the orbit runs N-S away from the polar turn).
+    ns_std = abs(v1[1] - v0[1]) + abs(v3[1] - v2[1])
+    ns_rot = abs(v2[1] - v1[1]) + abs(v0[1] - v3[1])
+    return "standard" if ns_std > ns_rot else "rotated"
+
+
+def _range_lines(ring) -> dict:
+    """Identify the range lines of the SAFE ring.
+
+    Returns ``{"width_km", "near_mid", "far_mid", "r_s_km", "label"}`` with
+    the across-track width, the (lon, lat) midpoints of the near / far range
+    lines, the inverted orbit altitude, and the range-line family label.
+
+    Raises
+    ------
+    ValueError
+        If neither edge pair inverts to an orbit altitude in the documented
+        band (partial-swath footprint, unknown ring convention, or a width
+        outside the 697.6 to 725.8 km altitude reach).
+    """
+    corners = _ring_corners(ring)
+    v0, v1, v2, v3 = corners
+    candidates = {
+        "standard": (_edge_midpoint(v0, v1), _edge_midpoint(v2, v3)),
+        "rotated": (_edge_midpoint(v1, v2), _edge_midpoint(v3, v0)),
+    }
+    try:
+        label = _range_line_family(ring)
+    except ValueError:
+        # Re-raise with the detailed per-family widths for diagnostics.
+        raise ValueError(
+            "the SAFE footprint width does not invert to an orbit altitude in "
+            f"the documented 697.6 to 725.8 km band (standard width "
+            f"{_spherical_km(_edge_midpoint(v0, v1), _edge_midpoint(v2, v3)):.1f} "
+            f"km, rotated width "
+            f"{_spherical_km(_edge_midpoint(v1, v2), _edge_midpoint(v3, v0)):.1f} "
+            "km): partial-swath footprint or unknown ring convention"
+        ) from None
+    mid_a, mid_b = candidates[label]
+    width = _spherical_km(mid_a, mid_b)
+    r_s = _invert_width(width)
+    # The near / far ordering is the same for every vertex order: the
+    # right-looking radar puts the near range line on the ground-track
+    # side and the far range line furthest along the look direction.
+    near, far = _near_far_from_look(ring, mid_a, mid_b)
+    return {"width_km": width, "near_mid": near, "far_mid": far,
+            "r_s_km": r_s, "label": label}
 
 
 def _sm_width_band_km() -> tuple[float, float]:

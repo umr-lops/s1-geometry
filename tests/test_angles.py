@@ -20,6 +20,7 @@ from s1_geometry import (
 from s1_geometry.angles import (
     MODE_SIGMA,
     R_S_REF_SM_KM,
+    _range_line_family,
     _ref_point_in_footprint,
     central_angle_rad,
     deflection_of_vertical_deg,
@@ -32,7 +33,13 @@ from s1_geometry.angles import (
     sigma_of_r_s,
     width_const_slant_km,
 )
-from tests.rings import ASC_RING, DESC_RING, EW_RING, USER_DESC_RING_CW
+from tests.rings import (
+    ASC_RING,
+    DESC_RING,
+    EW_RING,
+    F512_NEAR_SQUARE_RING,
+    USER_DESC_RING_CW,
+)
 
 
 def _center(ring):
@@ -127,6 +134,25 @@ def test_swath_width_rejects_out_of_band_ring():
     small_box = [(0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.0, 0.5), (0.0, 0.0)]
     with pytest.raises(ValueError, match="does not invert"):
         swath_width_km(small_box)
+
+
+def test_range_line_family():
+    # standard CDSE order: the range lines are the {e0, e2} family
+    assert _range_line_family(ASC_RING) == "standard"
+    assert _range_line_family(DESC_RING) == "standard"
+    # product-page (clockwise) order: the range lines are the {e1, e3} family
+    assert _range_line_family(USER_DESC_RING_CW) == "rotated"
+    # near-square IW ring: the edge-length heuristic assumes standard, but the
+    # width-inversion family is rotated (the misclassification of issue #6)
+    assert _range_line_family(F512_NEAR_SQUARE_RING) == "rotated"
+    # near-square EW ring: both discriminators agree on standard
+    assert _range_line_family(EW_RING) == "standard"
+
+
+def test_range_line_family_rejects_out_of_band_ring():
+    small_box = [(0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.0, 0.5), (0.0, 0.0)]
+    with pytest.raises(ValueError, match="does not invert"):
+        _range_line_family(small_box)
 
 
 def test_dfrac_of_point_from_lines_on_a_box():

@@ -37,6 +37,17 @@ EW_RING = [
     (-115.130974, -70.386246), (-122.45948, -67.414169),
     (-130.805969, -69.542892),
 ]
+# Near-square IW OCN ring (standard CDSE order, ~47 N): the two edge families
+# are within 5 % in length, so the edge-length heuristic assumed the standard
+# range-line family and misclassified the pass as descending.  The width-
+# inversion family is rotated ({e1, e3}), giving the correct ascending pass.
+# S1A_IW_OCN__2SDV_20260111T..._F512.SAFE (2026-01-11); regression for the
+# near-square misclassification (issue #6).
+F512_NEAR_SQUARE_RING = [
+    (-8.848333, 46.394196), (-5.605457, 46.783733),
+    (-6.095352, 48.900375), (-9.471695, 48.5098),
+    (-8.848333, 46.394196),
+]
 USER_DESC_RING_CW = [
     (-5.260309, 47.881615), (-1.791353, 47.47398),
     (-2.225839, 45.976742), (-5.596841, 46.383617),
