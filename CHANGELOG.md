@@ -5,6 +5,10 @@ git tags (calendar versioning, `YYYY.MM.DD`).
 
 ## Unreleased
 
+- `wv_footprint_from_imagettes`: build the time-ordered WV footprint from
+  per-imagette geometries (OData `Imagettes`, STAC imagette items), e.g. when
+  the product footprint was re-ordered by a GIS union; checked on 15,239 SOBA
+  matchup items (imagette index and subswath recovered for every point inside).
 - Zenodo DOI (concept, all versions): 10.5281/zenodo.24395550.
 - Docs: new *How it works* page (methodology: inputs, models, calibration,
   accuracy, limits, in plain English); validation page rebuilt (examples

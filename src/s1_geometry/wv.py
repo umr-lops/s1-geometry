@@ -61,6 +61,7 @@ from s1_geometry.angles import R_E_KM
 from s1_geometry.footprint import (
     ASCENDING,
     DESCENDING,
+    _loads_geometry,
     as_multipolygon,
     merge_antimeridian_splits,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "S1WVAngles",
     "WV_THETA_DOC",
     "estimate_wv_angles",
+    "wv_footprint_from_imagettes",
     "wv_theta_deg",
 ]
 
@@ -352,6 +354,56 @@ def _solve_window(centers: np.ndarray, r_s: np.ndarray, ring_lat: np.ndarray):
         th2 /= np.linalg.norm(th2)
         burst_heading[i] = math.degrees(math.atan2(th2 @ e, th2 @ nn)) % 360.0
     return q, burst_heading, is_wv1
+
+
+def wv_footprint_from_imagettes(imagettes) -> list[np.ndarray]:
+    """Build the time-ordered WV product footprint from per-imagette geometries.
+
+    Use it when the product (SAFE) footprint is not available in time order
+    -- e.g. a MultiPolygon re-ordered by a GIS library -- but the imagettes
+    are, as in the CDSE OData ``Imagettes`` expansion or a STAC collection of
+    imagette items.
+
+    Parameters
+    ----------
+    imagettes:
+        A sequence of imagettes, each either a mapping with an ``"index"``
+        (1-based imagette number, the time order) and a geometry under
+        ``"GeoFootprint"``, ``"Footprint"`` or ``"geometry"``, or directly a
+        geometry (then the sequence order is taken as the time order).  A
+        geometry is a GeoJSON Polygon / MultiPolygon (dict or string), a WKT
+        string or a ring of (lon, lat) vertices; an imagette split in two at
+        the antimeridian (a MultiPolygon) is kept as two consecutive rings and
+        re-joined by :func:`estimate_wv_angles`.
+
+    Returns
+    -------
+    list of numpy.ndarray
+        The (lon, lat) rings in time order, to pass to
+        :func:`estimate_wv_angles` (or ``estimate_geometry(mode="WV")``).
+    """
+    items = list(imagettes)
+    if items and isinstance(items[0], dict) and "index" in items[0]:
+        items = sorted(items, key=lambda item: int(item["index"]))
+    rings: list[np.ndarray] = []
+    for item in items:
+        geom = item
+        if isinstance(item, dict) and "type" not in item:
+            for key in ("GeoFootprint", "Footprint", "geometry"):
+                if item.get(key) is not None:
+                    geom = item[key]
+                    break
+            else:
+                raise ValueError(f"no geometry in imagette {item.get('index', item)!r}")
+        if isinstance(geom, str):
+            geom = _loads_geometry(geom)
+        if isinstance(geom, dict) and geom.get("type") == "Polygon":
+            rings.append(np.asarray(geom["coordinates"][0], dtype=float))
+        elif isinstance(geom, dict) and geom.get("type") == "MultiPolygon":
+            rings.extend(np.asarray(poly[0], dtype=float) for poly in geom["coordinates"])
+        else:
+            rings.append(np.asarray(geom, dtype=float))
+    return rings
 
 
 def estimate_wv_angles(

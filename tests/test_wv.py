@@ -390,3 +390,26 @@ def test_rings_not_in_time_order_are_rejected():
     order = list(range(0, 12, 2)) + list(range(1, 12, 2))  # WV1 chain then WV2 chain
     with pytest.raises(ValueError, match="time order"):
         estimate_wv_angles([rings[i] for i in order], 7077.0, lons, lats)
+
+
+def test_wv_footprint_from_imagettes_orders_and_keeps_dateline_pieces():
+    from s1_geometry import wv_footprint_from_imagettes
+
+    rings, subswaths, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=8, along_track_km=60.0)
+    lons, lats = _centres(rings)
+    imagettes = [{"index": k + 1, "GeoFootprint": {"type": "Polygon", "coordinates": [r]}}
+                 for k, r in enumerate(rings)]
+    shuffled = imagettes[::-1]  # e.g. a list re-ordered by a GIS tool
+    built = wv_footprint_from_imagettes(shuffled)
+    assert len(built) == len(rings)
+    res = estimate_wv_angles(built, 7077.0, lons, lats)
+    np.testing.assert_array_equal(res.ring_index, np.arange(len(rings)))
+    np.testing.assert_array_equal(res.subswath, subswaths)
+    # bare geometries (sequence order = time order), WKT and a dateline MultiPolygon
+    split = {"type": "MultiPolygon", "coordinates": [
+        [[[179.9, 0.0], [180.0, 0.0], [180.0, 0.2], [179.9, 0.2], [179.9, 0.0]]],
+        [[[-180.0, 0.0], [-179.9, 0.0], [-179.9, 0.2], [-180.0, 0.2], [-180.0, 0.0]]]]}
+    out = wv_footprint_from_imagettes([split, "POLYGON ((0 0, 1 0, 1 1, 0 0))"])
+    assert len(out) == 3 and out[0][0, 0] == 179.9 and out[2].shape == (4, 2)
+    with pytest.raises(ValueError, match="no geometry"):
+        wv_footprint_from_imagettes([{"index": 1, "Name": "x"}])
