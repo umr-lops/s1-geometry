@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/s1-geometry.svg)](https://pypi.org/project/s1-geometry/)
 [![Python](https://img.shields.io/pypi/pyversions/s1-geometry.svg)](https://pypi.org/project/s1-geometry/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24395550.svg)](https://doi.org/10.5281/zenodo.24395550)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 Tool to estimate geometric quantities (such as incidence, elevation or

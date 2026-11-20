@@ -5,6 +5,12 @@ git tags (calendar versioning, `YYYY.MM.DD`).
 
 ## Unreleased
 
+- Zenodo DOI (concept, all versions): 10.5281/zenodo.24395550.
+
+## 2026.11.20
+
+Zenodo DOI of this version: 10.5281/zenodo.24395551.
+
 ### Added
 - `s1_geometry.orbit.satellite_radius_km(lat, orbit_direction)`: the satellite
   geocentric distance from metadata only (fitted on POEORB state vectors of

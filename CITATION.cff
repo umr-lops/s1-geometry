@@ -6,6 +6,7 @@ authors:
   - family-names: Grouazel
     given-names: Antoine
     affiliation: "Ifremer, Univ. Brest, CNRS, IRD, Laboratoire d'Océanographie Physique et Spatiale (LOPS)"
+doi: 10.5281/zenodo.24395550
 repository-code: "https://github.com/umr-lops/s1-geometry"
 url: "https://s1-geometry.readthedocs.io"
 license: MIT
