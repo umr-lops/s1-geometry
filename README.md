@@ -158,6 +158,13 @@ a bundled 10-row sample lives in `examples/data/`).
 
 ## The model
 
+A plain-English explanation of the inputs, the models, their calibration and
+their accuracy, with figures, is on the
+[*How it works*](https://s1-geometry.readthedocs.io/en/latest/methodology.html)
+page; the comparison with the ESA L2 OCN products is on the
+[validation](https://s1-geometry.readthedocs.io/en/latest/certification.html)
+page.
+
 The heading of an IW acquisition depends almost only on the latitude and the
 orbit direction; the four satellites agree within a fraction of a degree, so
 two pooled degree-4 polynomials (ascending / descending) describe the whole
@@ -188,8 +195,8 @@ against the ESA / SentiWiki documented angles to <= 0.07 deg):
   ground width W of the 4-vertex ring is a monotonic function of the
   satellite geocentric distance R_s; the catalogue polygon is computed with
   the mean Earth radius (6371 km), so inverting W -> R_s (bisection)
-  calibrates the satellite altitude from the footprint alone, with no orbit
-  file. In the standard CDSE vertex order (GRDH/GRDM/SLC/OCN) the range lines
+  gives a footprint-equivalent satellite distance from the footprint alone,
+  with no orbit file (within ~9 km of the true distance). In the standard CDSE vertex order (GRDH/GRDM/SLC/OCN) the range lines
   are the v0-v1 (far) and v2-v3 (near) edges, ascending and descending alike;
   rings with a rotated vertex order (e.g. ETA) fall back to the other edge
   pair when the standard width does not invert to a valid orbit altitude.
