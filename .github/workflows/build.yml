@@ -2,13 +2,20 @@ name: Build
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   distributions:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # hatch-vcs needs the tags
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -16,6 +23,7 @@ jobs:
       - run: python -m build
       - run: pip install dist/*.whl
       - run: s1-geometry --help
+      - run: python -c "import s1_geometry; print(s1_geometry.__version__)"
       - uses: actions/upload-artifact@v7
         with:
           name: dist

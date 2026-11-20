@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "s1-geometry: Sentinel-1 geometric quantities from the SAR footprint metadata"
+type: software
+authors:
+  - family-names: Grouazel
+    given-names: Antoine
+    affiliation: "Ifremer, Univ. Brest, CNRS, IRD, Laboratoire d'Océanographie Physique et Spatiale (LOPS)"
+repository-code: "https://github.com/umr-lops/s1-geometry"
+url: "https://s1-geometry.readthedocs.io"
+license: MIT
+keywords:
+  - Sentinel-1
+  - SAR
+  - incidence angle
+  - ground heading
+  - wave mode

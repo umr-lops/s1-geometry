@@ -12,9 +12,15 @@ reference point::
     s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode IW
     s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --json
 
+or the incidence / elevation / heading of a WV (Wave mode) acquisition at a
+reference point, from the product footprint only (OData metadata)::
+
+    s1-geometry wv "geography'SRID=4326;MULTIPOLYGON (((...)), ...)'" --lon -76.7 --lat -29.3
+
 The polygon argument is a GeoJSON file path or an inline JSON string: a
 GeoJSON Polygon object, a GeoJSON Feature, or a bare ring of [lon, lat]
-vertices.
+vertices; for ``wv`` a GeoJSON MultiPolygon (object or Feature) or a WKT
+``MULTIPOLYGON`` (the CDSE OData ``Footprint``).
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ import json
 from pathlib import Path
 
 from s1_geometry import estimate_geometry, estimate_incidence_elevation
+from s1_geometry.footprint import parse_wkt
 
 
 def _load_polygon(source: str) -> dict:
@@ -32,10 +39,15 @@ def _load_polygon(source: str) -> dict:
     Accepts a GeoJSON Polygon object, a GeoJSON Feature with a Polygon
     geometry, or a bare ring (a list of [lon, lat] vertices).
     """
-    path = Path(source)
-    text = path.read_text() if path.is_file() else source
+    try:
+        is_file = Path(source).is_file()
+    except OSError:  # an inline polygon longer than the OS path limit
+        is_file = False
+    text = Path(source).read_text() if is_file else source
+    if text.lstrip()[:1] not in ("{", "["):
+        return parse_wkt(text)
     data = json.loads(text)
-    if isinstance(data, dict) and data.get("type") == "Polygon":
+    if isinstance(data, dict) and data.get("type") in ("Polygon", "MultiPolygon"):
         return data
     if isinstance(data, dict) and data.get("type") == "Feature":
         return data["geometry"]
@@ -99,14 +111,33 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true", help="print the result as a JSON object",
     )
 
+    wv = sub.add_parser(
+        "wv",
+        help="estimate the WV incidence / elevation / heading at a reference point",
+    )
+    wv.add_argument(
+        "polygon",
+        help="WV product footprint: GeoJSON MultiPolygon file path or inline JSON, "
+             "or WKT MULTIPOLYGON (the CDSE OData Footprint)",
+    )
+    wv.add_argument("--lon", type=float, required=True, help="reference longitude in degrees")
+    wv.add_argument("--lat", type=float, required=True, help="reference latitude in degrees")
+    wv.add_argument(
+        "--r-s", type=float, default=None, dest="r_s",
+        help="satellite geocentric distance in km (default: metadata-only orbit model)",
+    )
+    wv.add_argument(
+        "--json", action="store_true", help="print the result as a JSON object",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "heading":
         try:
             polygon = _load_polygon(args.polygon)
+            result = estimate_geometry(polygon, ref_lat=args.lat)
         except (OSError, ValueError, json.JSONDecodeError) as error:
-            parser.error(f"cannot read the polygon: {error}")
-        result = estimate_geometry(polygon, ref_lat=args.lat)
+            parser.error(f"cannot estimate the heading: {error}")
         if args.json:
             print(json.dumps({
                 "orbit_direction": result.orbit_direction,
@@ -149,6 +180,29 @@ def main(argv: list[str] | None = None) -> int:
             print(f"r_s_km: {result.r_s_km:.2f}")
             print(f"incidence_deg: {result.incidence_deg:.3f}")
             print(f"elevation_deg: {result.elevation_deg:.3f}")
+    elif args.command == "wv":
+        try:
+            polygon = _load_polygon(args.polygon)
+            result = estimate_geometry(polygon, ref_lat=args.lat, ref_lon=args.lon,
+                                       mode="WV", r_s_km=args.r_s)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            parser.error(f"cannot estimate the WV angles: {error}")
+        fields = {
+            "mode": result.mode,
+            "ref_lon": args.lon,
+            "ref_lat": result.ref_lat,
+            "subswath": result.subswath,
+            "orbit_direction": result.orbit_direction,
+            "r_s_km": result.r_s_km,
+            "incidence_deg": result.incidence_deg,
+            "elevation_deg": result.elevation_deg,
+            "heading_deg": result.heading_deg,
+        }
+        if args.json:
+            print(json.dumps(fields, indent=2))
+        else:
+            for name, value in fields.items():
+                print(f"{name}: {value:.3f}" if isinstance(value, float) else f"{name}: {value}")
     return 0
 
 

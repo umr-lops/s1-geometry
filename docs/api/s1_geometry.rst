@@ -12,6 +12,8 @@ Submodules
    s1_geometry.geometry
    s1_geometry.angles
    s1_geometry.wv
+   s1_geometry.orbit
+   s1_geometry.table
    s1_geometry.cli
 
 Module contents

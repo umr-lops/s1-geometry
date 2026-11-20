@@ -55,7 +55,8 @@ a reference point from the SAFE footprint and the imaging mode::
    # result.swath_width_km   across-track ground width of the footprint (km)
    # result.r_s_km           inverted satellite geocentric distance (km)
    # result.incidence_deg    incidence angle from the local vertical (deg)
-   # result.elevation_deg    90 - incidence (deg, exact)
+   # result.elevation_deg    radar elevation angle = off-nadir angle sigma (deg,
+   #                         ESA L2 OCN *ElevationAngle convention)
 
 ``mode`` defaults to ``"IW"``. A dedicated generic entry point is also
 available: ``estimate_geometry(sar_polygon, ref_lon=10.5, ref_lat=36.59,
@@ -71,6 +72,42 @@ the IW model). Catalogue-oriented named functions are exported as well:
   footprint (km).
 * ``dfrac_of_point(sar_polygon, ref_lon, ref_lat)`` -- the across-track
   position of the point (0 = near range line, 1 = far range line).
+
+WV (Wave mode) from the OData metadata only
+-------------------------------------------
+
+A WV product footprint (the CDSE OData ``Footprint``, a WKT
+``MULTIPOLYGON``; or the ``GeoFootprint`` GeoJSON) holds one small ring per
+imagette, in time order, alternating between the WV1 and WV2 subswaths.  The
+angles are returned per reference point; the satellite geocentric distance
+comes from the metadata-only orbit model
+(:func:`~s1_geometry.orbit.satellite_radius_km`), so nothing else is needed::
+
+   from s1_geometry import estimate_geometry, estimate_wv_angles
+
+   geo = estimate_geometry(odata_footprint, ref_lon=-76.7, ref_lat=-29.3, mode="WV")
+   # geo.incidence_deg, geo.elevation_deg, geo.heading_deg, geo.subswath, geo.r_s_km
+
+   wv = estimate_wv_angles(odata_footprint, None, lons, lats)  # vectorised
+
+To add the columns to a table (one row per reference point, the product
+footprint in a column; needs the ``parquet`` extra)::
+
+   from s1_geometry.table import add_wv_angle_columns
+
+   df = add_wv_angle_columns(df, footprint="Footprint", lon="ref_lon", lat="ref_lat")
+   # new columns: sar_incidence_angle, sar_elevation_angle, sar_ground_heading,
+   #              sar_wv_subswath
+
+A **single imagette polygon is not enough**: the two subswath chains of the
+product are needed to locate the track plane.  Points outside every imagette
+raise ``ValueError`` (or give NaN with ``on_outside="nan"``).
+
+The orbit model reproduces the POEORB state vectors of Sentinel-1A, -1C and
+-1D to 0.10 km (std), 0.29 km (max), i.e. ~0.02 deg of incidence.  Note
+that the satellite geocentric distance (7065 to 7082 km) is not
+``6371 km +`` the documented 697.6-725.8 km altitude (a height above the
+WGS84 ellipsoid).
 
 The reference point must lie **inside the SAFE footprint** (the 4-vertex
 parallelogram, boundary included).  ``estimate_incidence_elevation`` (and
@@ -138,8 +175,11 @@ the ESA / SentiWiki documented angles to <= 0.07 deg):
   min / max-altitude values per sub-swath), the geocentric incidence is the
   closed form ``theta_c = asin[(R_s/R_e) * sin(sigma)]``. The local
   (ellipsoid-normal) incidence adds the deflection of the vertical (max
-  ~0.19 deg near \|lat\| = 45 deg) and the elevation is exactly
-  ``90 deg - incidence``.
+  ~0.19 deg near \|lat\| = 45 deg).  The returned **elevation** is the
+  radar elevation angle of the ESA L2 OCN ``*ElevationAngle`` convention:
+  the angle at the satellite between nadir and the line of sight, i.e. the
+  off-nadir angle ``sigma`` (``incidence - gamma``), *not* ``90 deg -
+  incidence``.
 
 The across-track width ``W`` is the spherical distance (6371 km sphere)
 between the midpoints of the two range lines of the 4-vertex SAFE ring. In

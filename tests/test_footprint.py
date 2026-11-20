@@ -9,6 +9,7 @@ from s1_geometry.footprint import (
     ASCENDING,
     DESCENDING,
     TURNING,
+    as_multipolygon,
     load_sar_polygons,
     orbit_direction_from_ring,
     point_in_polygon,
@@ -159,3 +160,30 @@ def test_load_sar_polygons_skips_wv_rows(tmp_path):
          json.dumps({"type": "Polygon", "coordinates": [DESC_RING]})),
     ])
     assert load_sar_polygons([path]) == {}
+
+
+def test_orbit_direction_rejects_wv_imagette_sized_ring():
+    # a ~20 km WV imagette used to be classified "turning" (heading 270 deg)
+    imagette = [(-30.0, 10.0), (-29.82, 9.97), (-29.79, 10.15), (-29.97, 10.18), (-30.0, 10.0)]
+    with pytest.raises(ValueError, match="too small"):
+        orbit_direction_from_ring(imagette)
+
+
+def test_parse_wkt_odata_footprint():
+    from s1_geometry import parse_wkt
+
+    poly = parse_wkt("SRID=4326;POLYGON ((1 2, 3 4, 5 6.5, 1 2))")
+    assert poly == {"type": "Polygon", "coordinates": [[[1, 2], [3, 4], [5, 6.5], [1, 2]]]}
+    multi = parse_wkt(
+        "geography'SRID=4326;MULTIPOLYGON (((-76.8 -29.2, -76.7 -29.4, -76.5 -29.3, -76.8 -29.2)),"
+        " ((-75.2 -27.9, -75.2 -28.1, -75.0 -28.0, -75.2 -27.9)))'")
+    assert multi["type"] == "MultiPolygon"
+    assert len(as_multipolygon(multi)) == 2
+    with pytest.raises(ValueError, match="WKT"):
+        parse_wkt("LINESTRING (0 0, 1 1)")
+
+
+def test_polygon_functions_point_multipolygons_to_wv():
+    multi = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]]}
+    with pytest.raises(ValueError, match="estimate_wv_angles"):
+        orbit_direction_from_ring(multi)

@@ -1,15 +1,20 @@
 """S1 **WV** SAR incidence, elevation and heading angles from the SAFE footprint.
 
-The wide-swath (WV) acquisition imaged by the C-band radar (Sentinel-1D) uses
-two fixed off-nadir subswaths (WV1 ~ 21 deg, WV2 ~ 33 deg) sampled in a
-sequence of short bursts that alternate between the two subswaths.  The CDSE
-``GeoFootprint`` is a *MultiPolygon*: one small (~14 km) ring per burst, the
-rings forming two interleaved chains (the subswaths) along the ground track.
+The Wave mode (WV) of the Sentinel-1 C-band radar acquires small (~20 km)
+imagettes on two fixed off-nadir subswaths (WV1 ~ 21 deg, WV2 ~ 32 deg
+off-nadir), alternating between the two subswaths ("leapfrog") along the
+ground track.  The product footprint (the CDSE OData ``Footprint`` /
+``GeoFootprint``) is a *MultiPolygon*: one small ring per imagette, in time
+order, the rings forming two interleaved chains (the subswaths).  A single
+imagette polygon does not carry enough information: the chains are needed to
+locate the track plane.
 
 Unlike IW / EW, the WV footprint does not encode a single constant-slant-range
-swath, so the satellite geocentric distance ``r_s_km`` is an *input* (from the
-orbit or the metadata), and the angles are returned **per ground point** (the
-look geometry differs across each burst's imaged cell).  The model:
+swath, so the satellite geocentric distance ``r_s`` cannot be inverted from
+it.  It is either given, or (by default) taken from the metadata-only orbit
+model :func:`~s1_geometry.orbit.satellite_radius_km` (latitude and pass
+direction, ~0.1 km accuracy), so the chain runs from the OData metadata
+alone.  The angles are returned **per ground point**.  The model:
 
 * fit the track-plane normal ``n`` from the paired chain midpoints and build
   the in-plane along-track basis ``u`` (the max eigenvector of the ring centres
@@ -33,9 +38,11 @@ look geometry differs across each burst's imaged cell).  The model:
   azimuth, clockwise from North).
 
 Validated point-by-point against the ESA L2 OCN ``owi`` grid (incidence,
-elevation, heading) on four products (two ascending, two descending): RMSE
-0.19-0.44 deg (incidence), 0.18-0.41 deg (elevation), 0.09-0.32 deg (heading).
-See :doc:`/certification`.
+elevation, heading) on two Sentinel-1D products (one ascending, one
+descending, mid latitudes, ``r_s`` from the OCN state vectors): RMSE
+0.19-0.29 deg (incidence), 0.18-0.27 deg (elevation), 0.09 deg (heading).
+See :doc:`/certification`.  Wider validation (S1A / S1C, high latitudes,
+long products, ``r_s`` from the orbit model) is pending.
 """
 
 from __future__ import annotations
@@ -45,8 +52,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from s1_geometry.angles import R_E_KM, R_S_MAX_KM, R_S_MIN_KM
-from s1_geometry.footprint import as_multipolygon
+from s1_geometry.angles import R_E_KM
+from s1_geometry.footprint import ASCENDING, DESCENDING, as_multipolygon
+from s1_geometry.orbit import R_S_ORBIT_MAX_KM, R_S_ORBIT_MIN_KM, satellite_radius_km
 
 __all__ = [
     "S1WVAngles",
@@ -75,8 +83,13 @@ def wv_theta_deg(subswath: int, r_s_km: float, lat_deg: float) -> float:
 
     The documented band-center at the reference altitude (711.7 km), linear in
     the satellite geocentric distance ``r_s_km``, plus a calibrated latitude
-    term.  ``r_s_km`` is the satellite geocentric distance (km); the altitude
-    is ``r_s_km - R_E_KM``.
+    term.  ``r_s_km`` is the satellite geocentric distance (km).
+
+    Convention: the law uses ``r_s_km - R_E_KM`` (6371 km sphere) as the
+    "altitude", whereas the documented band (697.6 to 725.8 km) is the height
+    above the WGS84 ellipsoid; the two differ by up to ~14 km at high
+    latitude.  The calibrated latitude term was fitted with this convention,
+    so keep it unchanged unless the law is refitted.
     """
     if subswath not in WV_THETA_DOC:
         raise ValueError(f"unknown WV subswath {subswath!r} (expected 1 or 2)")
@@ -128,7 +141,7 @@ class S1WVAngles:
     mode:
         ``"WV"``.
     r_s_km:
-        Satellite geocentric distance (km); the altitude is ``r_s_km - R_E_KM``.
+        Mean satellite geocentric distance (km) over the imagette rings.
     mean_lat_deg:
         Mean latitude (deg) of the footprint ring centres.
     n_rings:
@@ -163,55 +176,32 @@ class S1WVAngles:
     subswath: np.ndarray
 
 
-def estimate_wv_angles(
-    sar_multipolygon, r_s_km: float, lon, lat,
-) -> S1WVAngles:
-    """Estimate the WV incidence / elevation / heading angles at target points.
+def _pass_direction_per_ring(centers: np.ndarray) -> np.ndarray:
+    """Pass direction of each ring from the ring time progression.
 
-    Parameters
-    ----------
-    sar_multipolygon:
-        The WV SAFE footprint: a GeoJSON MultiPolygon string / dict, or a
-        sequence of (lon, lat) rings (one small ring per burst, in burst /
-        time order, alternating between the two subswaths).
-    r_s_km:
-        Satellite geocentric distance (km).  WV cannot invert ``R_s`` from the
-        footprint width (there is no single constant-slant-range swath), so it
-        is an input; it must be in the documented 697.6 to 725.8 km altitude
-        band.
-    lon, lat:
-        Target point longitudes / latitudes (deg): a scalar or an array (e.g.
-        the centres of the ESA OCN ``owi`` grid cells).  The angles are
-        returned per point.
-
-    Returns
-    -------
-    S1WVAngles
-        Per-point incidence / elevation / heading and the intermediate
-        quantities (see :class:`S1WVAngles`).
-
-    Raises
-    ------
-    ValueError
-        If ``r_s_km`` is outside the documented altitude band, the footprint
-        is malformed, or it does not show two distinct subswath chains.
+    The latitude change between the same-subswath neighbours ``i - 2`` and
+    ``i + 2`` (the ring order is the burst / time order) gives the flight's
+    north component; a product crossing the polar turn gets the right
+    direction on each side.
     """
-    r_s = float(r_s_km)
-    if not (R_S_MIN_KM <= r_s <= R_S_MAX_KM):
-        raise ValueError(
-            f"r_s_km {r_s:.2f} is outside the documented 697.6 to 725.8 km "
-            f"altitude band (satellite geocentric distance {R_S_MIN_KM:.1f} "
-            f"to {R_S_MAX_KM:.1f} km)")
-    rings = as_multipolygon(sar_multipolygon)
-    if len(rings) < 4:
-        raise ValueError(
-            f"WV footprint needs at least 4 burst rings (two per subswath), "
-            f"got {len(rings)}")
+    lat = np.degrees(np.arcsin(np.clip(
+        centers[:, 2] / np.linalg.norm(centers, axis=1), -1.0, 1.0)))
+    n = len(lat)
+    idx = np.arange(n)
+    dlat = lat[np.minimum(idx + 2, n - 1)] - lat[np.maximum(idx - 2, 0)]
+    return np.where(dlat >= 0.0, ASCENDING, DESCENDING)
 
-    centers = np.array([_to_3d(r).mean(axis=0) for r in rings])
+
+def _solve_window(centers: np.ndarray, r_s: np.ndarray, mean_lat: float):
+    """Sub-satellite point, heading and subswath of each ring of a window.
+
+    ``centers`` are the (n, 3) ring centres (km, ECEF, time order) and
+    ``r_s`` the (n,) satellite geocentric distances (km).  Returns
+    ``(q, heading_deg, is_wv1)``: the (n, 3) sub-satellite points, the (n,)
+    in-plane tangent headings and the (n,) WV1 flags.
+    """
     n_ring = centers.shape[0]
     mean_center = centers.mean(axis=0)
-    mean_lat = float(np.mean([r[:, 1].mean() for r in rings]))
 
     # Track-plane normal from the paired chain midpoints (consecutive rings
     # are opposite subswaths).
@@ -274,12 +264,12 @@ def estimate_wv_angles(
     sense = 1.0 if dphi.mean() > 0 else -1.0
 
     # Per-burst sub-satellite point Q_i and heading.
-    h = r_s - R_E_KM
     q = np.empty((n_ring, 3))
     burst_heading = np.empty(n_ring)
     for i in range(n_ring):
         sw = 1 if is_wv1[i] else 2
-        th = math.radians(wv_theta_deg(sw, r_s, mean_lat))
+        h = r_s[i] - R_E_KM
+        th = math.radians(wv_theta_deg(sw, r_s[i], mean_lat))
         d_km = h * math.tan(th)
         d_m = d1m if sw == 1 else d2m
         delta0 = d_m + d_km
@@ -299,34 +289,150 @@ def estimate_wv_angles(
         th2 = t - (t @ uu) * uu
         th2 /= np.linalg.norm(th2)
         burst_heading[i] = math.degrees(math.atan2(th2 @ e, th2 @ nn)) % 360.0
+    return q, burst_heading, is_wv1
 
-    # Target points -> nearest burst ring, then per-point angles.
+
+def estimate_wv_angles(
+    sar_multipolygon,
+    r_s_km: float | None,
+    lon,
+    lat,
+    *,
+    orbit_direction: str | None = None,
+    window: int | None = None,
+    on_outside: str = "raise",
+) -> S1WVAngles:
+    """Estimate the WV incidence / elevation / heading angles at target points.
+
+    Parameters
+    ----------
+    sar_multipolygon:
+        The WV SAFE footprint: a GeoJSON MultiPolygon string / dict, a WKT
+        ``MULTIPOLYGON`` (e.g. the CDSE OData ``Footprint``), or a sequence of
+        (lon, lat) rings (one small ring per imagette, in time order,
+        alternating between the two subswaths).
+    r_s_km:
+        Satellite geocentric distance (km), or ``None`` to derive it per
+        ring from the metadata-only orbit model
+        :func:`~s1_geometry.orbit.satellite_radius_km` (latitude + pass
+        direction).  When given, it must lie in the Sentinel-1 orbit range
+        :data:`~s1_geometry.orbit.R_S_ORBIT_MIN_KM` to
+        :data:`~s1_geometry.orbit.R_S_ORBIT_MAX_KM`.
+    lon, lat:
+        Target point longitudes / latitudes (deg): a scalar or an array (e.g.
+        the centres of the ESA OCN ``owi`` grid cells, or the imagette
+        reference points).  The angles are returned per point.
+    orbit_direction:
+        Pass direction used by the orbit model when ``r_s_km`` is ``None``
+        (``"ascending"`` / ``"descending"``, case-insensitive, e.g. the CDSE
+        ``orbitDirection``).  By default it is derived per ring from the ring
+        time progression, which also handles products crossing the polar
+        turn (the catalogue attribute only describes the product start).
+    window:
+        ``None`` (default, the validated behaviour) fits one track geometry to
+        the whole product.  An integer ``w`` fits the geometry of each ring
+        on the ``2 w + 1`` rings around it, for long products whose ground
+        track departs from a single great circle (Earth rotation).
+    on_outside:
+        ``"raise"`` (default) raises ``ValueError`` when a target point lies
+        outside every imagette ring; ``"nan"`` returns NaN angles for it.
+
+    Returns
+    -------
+    S1WVAngles
+        Per-point incidence / elevation / heading and the intermediate
+        quantities (see :class:`S1WVAngles`).
+
+    Raises
+    ------
+    ValueError
+        If ``r_s_km`` is outside the Sentinel-1 orbit range, the footprint is
+        malformed or does not show two distinct subswath chains, or (with
+        ``on_outside="raise"``) a target point is outside the footprint.
+    """
+    if on_outside not in ("raise", "nan"):
+        raise ValueError(f"on_outside must be 'raise' or 'nan', got {on_outside!r}")
+    rings = as_multipolygon(sar_multipolygon)
+    if len(rings) < 4:
+        raise ValueError(
+            f"WV footprint needs at least 4 imagette rings (two per subswath), "
+            f"got {len(rings)}; a single imagette polygon is not enough, pass "
+            "the product footprint (the CDSE OData Footprint MultiPolygon)")
+    centers = np.array([_to_3d(r).mean(axis=0) for r in rings])
+    n_ring = centers.shape[0]
+    ring_lat = np.array([float(r[:, 1].mean()) for r in rings])
+    mean_lat = float(ring_lat.mean())
+
+    if r_s_km is None:
+        if orbit_direction is None:
+            directions = _pass_direction_per_ring(centers)
+        else:
+            directions = np.full(n_ring, str(orbit_direction).lower())
+        r_s = np.array([satellite_radius_km(lt, d)
+                        for lt, d in zip(ring_lat, directions, strict=True)])
+    else:
+        r_s = np.full(n_ring, float(r_s_km))
+        if not (R_S_ORBIT_MIN_KM <= r_s[0] <= R_S_ORBIT_MAX_KM):
+            raise ValueError(
+                f"r_s_km {r_s[0]:.2f} is outside the Sentinel-1 orbit range "
+                f"{R_S_ORBIT_MIN_KM:.1f} to {R_S_ORBIT_MAX_KM:.1f} km (satellite "
+                "geocentric distance, not the altitude above the ellipsoid)")
+
+    if window is None or n_ring <= 2 * int(window) + 1:
+        q, burst_heading, is_wv1 = _solve_window(centers, r_s, mean_lat)
+    else:
+        w = int(window)
+        if w < 2:
+            raise ValueError(f"window must be >= 2 rings, got {window!r}")
+        size = 2 * w + 1
+        q = np.empty((n_ring, 3))
+        burst_heading = np.empty(n_ring)
+        is_wv1 = np.empty(n_ring, dtype=bool)
+        for i in range(n_ring):
+            lo = min(max(i - w, 0), n_ring - size)
+            sub = slice(lo, lo + size)
+            qw, hw, sw = _solve_window(centers[sub], r_s[sub],
+                                       float(ring_lat[sub].mean()))
+            q[i], burst_heading[i], is_wv1[i] = qw[i - lo], hw[i - lo], sw[i - lo]
+
+    # Target points -> nearest imagette ring, then per-point angles.
     lon_arr = np.atleast_1d(np.asarray(lon, dtype=float))
     lat_arr = np.atleast_1d(np.asarray(lat, dtype=float))
     if lon_arr.shape != lat_arr.shape:
         raise ValueError(f"lon and lat must have the same shape, got "
                          f"{lon_arr.shape} and {lat_arr.shape}")
     p = _to_3d(np.column_stack([lon_arr.ravel(), lat_arr.ravel()]))
-    p = R_E_KM * p / np.linalg.norm(p, axis=1, keepdims=True)
     d = np.linalg.norm(p[:, None, :] - centers[None, :, :], axis=2)
     ring_index = np.argmin(d, axis=1)
 
-    inc = np.empty(p.shape[0])
-    el = np.empty(p.shape[0])
-    for j in range(p.shape[0]):
-        qi = q[ring_index[j]]
-        gamma = math.acos(np.clip((qi @ p[j]) / R_E_KM ** 2, -1.0, 1.0))
-        rk = math.sqrt(r_s ** 2 + R_E_KM ** 2
-                       - 2.0 * r_s * R_E_KM * math.cos(gamma))
-        ci = (r_s ** 2 - rk ** 2 - R_E_KM ** 2) / (2.0 * rk * R_E_KM)
-        inc[j] = math.degrees(math.acos(np.clip(ci, -1.0, 1.0)))
-        el[j] = inc[j] - math.degrees(gamma)
-    heading = burst_heading[ring_index]
+    # A point is inside the footprint when it is within its nearest ring's
+    # circumscribed radius (centre to farthest vertex), with a 10 % margin.
+    ring_radius = np.array([
+        np.linalg.norm(_to_3d(r) - c, axis=1).max() for r, c in zip(rings, centers, strict=True)
+    ])
+    outside = d[np.arange(len(p)), ring_index] > 1.1 * ring_radius[ring_index]
+    if outside.any() and on_outside == "raise":
+        j = int(np.flatnonzero(outside)[0])
+        raise ValueError(
+            f"{int(outside.sum())} target point(s) outside the WV footprint, e.g. "
+            f"({lon_arr.ravel()[j]:.4f}, {lat_arr.ravel()[j]:.4f}), "
+            f"{d[j, ring_index[j]]:.1f} km from the nearest imagette centre")
+
+    qi = q[ring_index]
+    rs = r_s[ring_index]
+    gamma = np.arccos(np.clip(np.einsum("ij,ij->i", qi, p) / R_E_KM ** 2, -1.0, 1.0))
+    rk = np.sqrt(rs ** 2 + R_E_KM ** 2 - 2.0 * rs * R_E_KM * np.cos(gamma))
+    ci = (rs ** 2 - rk ** 2 - R_E_KM ** 2) / (2.0 * rk * R_E_KM)
+    inc = np.degrees(np.arccos(np.clip(ci, -1.0, 1.0)))
+    el = inc - np.degrees(gamma)
+    heading = burst_heading[ring_index].copy()
     subswath = np.where(is_wv1[ring_index], 1, 2)
+    if outside.any():
+        inc[outside] = el[outside] = heading[outside] = np.nan
 
     return S1WVAngles(
         mode="WV",
-        r_s_km=r_s,
+        r_s_km=float(r_s.mean()),
         mean_lat_deg=mean_lat,
         n_rings=n_ring,
         lon_deg=lon_arr,

@@ -9,11 +9,18 @@ to the :class:`S1Geometry` dataclass and computed by
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from s1_geometry.angles import estimate_incidence_elevation
-from s1_geometry.footprint import _as_point_array, orbit_direction_from_ring
+from s1_geometry.footprint import (
+    ASCENDING,
+    DESCENDING,
+    _as_point_array,
+    orbit_direction_from_ring,
+)
 from s1_geometry.heading import heading_from_lat, sar_ground_heading_uncertainty
+from s1_geometry.wv import estimate_wv_angles
 
 
 @dataclass(frozen=True)
@@ -33,8 +40,11 @@ class S1Geometry:
         Latitude- and hemisphere-dependent heading uncertainty (deg); users
         decide instead of rejecting high-latitude acquisitions.
     mode:
-        Imaging mode (``"IW"``, ``"EW"`` or ``"SM"``) when the incidence /
-        elevation angles were estimated, otherwise ``None``.
+        Imaging mode (``"IW"``, ``"EW"``, ``"SM"`` or ``"WV"``) when the
+        incidence / elevation angles were estimated, otherwise ``None``.  For
+        ``"WV"`` the heading is the WV track model of :mod:`s1_geometry.wv`
+        (not the IW latitude polynomial) and its uncertainty is ``nan`` (not
+        characterised yet: the validated RMSE is ~0.1 deg on two products).
     beam:
         SM beam (``"S1".."S6"``) when :attr:`mode` is ``"SM"``, otherwise
         ``None``.  The SM chain is spec-based and not validated against ESA
@@ -47,6 +57,13 @@ class S1Geometry:
         ``*ElevationAngle`` convention: the angle at the satellite between
         nadir and the line of sight, equal to the off-nadir angle), or
         ``None`` when :attr:`mode` is ``None``.
+    subswath:
+        WV subswath (1 or 2) of the reference point when :attr:`mode` is
+        ``"WV"``, otherwise ``None``.
+    r_s_km:
+        Satellite geocentric distance (km) used for the angles (IW / EW: the
+        footprint-width inversion; WV: the given or orbit-model value), or
+        ``None`` when :attr:`mode` is ``None``.
     """
 
     orbit_direction: str
@@ -57,6 +74,31 @@ class S1Geometry:
     beam: str | None = None
     incidence_deg: float | None = None
     elevation_deg: float | None = None
+    subswath: int | None = None
+    r_s_km: float | None = None
+
+
+def _estimate_wv_geometry(sar_polygon, ref_lon, ref_lat, r_s_km, orbit_direction):
+    """The WV branch of :func:`estimate_geometry` (one reference point)."""
+    if ref_lon is None or ref_lat is None:
+        raise ValueError("mode='WV' needs ref_lon and ref_lat (a point inside an imagette)")
+    wv = estimate_wv_angles(sar_polygon, r_s_km, ref_lon, ref_lat,
+                            orbit_direction=orbit_direction)
+    heading = float(wv.heading_deg[0])
+    # pass direction of the reference point from its heading (northbound
+    # flight = ascending); the WV track model already handles the turn
+    orbit = ASCENDING if math.cos(math.radians(heading)) >= 0.0 else DESCENDING
+    return S1Geometry(
+        orbit_direction=orbit,
+        ref_lat=float(ref_lat),
+        heading_deg=heading,
+        heading_uncertainty_deg=float("nan"),
+        mode="WV",
+        incidence_deg=float(wv.incidence_deg[0]),
+        elevation_deg=float(wv.elevation_deg[0]),
+        subswath=int(wv.subswath[0]),
+        r_s_km=float(wv.r_s_km),
+    )
 
 
 def estimate_geometry(
@@ -65,6 +107,9 @@ def estimate_geometry(
     mode: str | None = None,
     ref_lon: float | None = None,
     beam: str | None = None,
+    *,
+    r_s_km: float | None = None,
+    orbit_direction: str | None = None,
 ) -> S1Geometry:
     """Estimate the geometric quantities of a Sentinel-1 acquisition.
 
@@ -72,16 +117,19 @@ def estimate_geometry(
     ----------
     sar_polygon:
         The SAFE footprint: a sequence of (lon, lat) vertices, a GeoJSON
-        Polygon string (the CDSE ``GeoFootprint`` column) or a GeoJSON
-        Polygon dict (the matchup STAC item representation).
+        Polygon string (the CDSE ``GeoFootprint`` column), a GeoJSON
+        Polygon dict (the matchup STAC item representation) or a WKT string
+        (the CDSE OData ``Footprint``).  For ``mode="WV"`` it is the product
+        MultiPolygon (one ring per imagette).
     ref_lat:
         Reference latitude (deg) at which the heading is evaluated. Defaults
         to the mean latitude of the 4 footprint vertices.
     mode:
-        Imaging mode, ``"IW"``, ``"EW"`` or ``"SM"``.  When given, the
-        incidence and elevation angles are estimated at the reference point;
-        the heading fields remain the IW model (a documented extrapolation
-        for EW / SM).
+        Imaging mode, ``"IW"``, ``"EW"``, ``"SM"`` or ``"WV"``.  When given,
+        the incidence and elevation angles are estimated at the reference
+        point; for IW / EW / SM the heading fields remain the IW model (a
+        documented extrapolation for EW / SM), for WV they come from the WV
+        track model (see :func:`~s1_geometry.wv.estimate_wv_angles`).
     ref_lon:
         Reference longitude (deg) of the point at which the incidence /
         elevation angles are evaluated.  Must be given together with
@@ -91,6 +139,10 @@ def estimate_geometry(
         SM beam (``"S1"`` to ``"S6"``, default ``"S3"``), used only when
         ``mode="SM"``.  The SM chain is spec-based (documented off-nadir
         bands) and not validated against ESA L2 data.
+    r_s_km, orbit_direction:
+        ``mode="WV"`` only: the satellite geocentric distance (km) and the
+        pass direction; both default to the metadata-only orbit model (see
+        :func:`~s1_geometry.orbit.satellite_radius_km`).
 
     Raises
     ------
@@ -100,6 +152,8 @@ def estimate_geometry(
         in the documented band (see
         :func:`~s1_geometry.angles.estimate_incidence_elevation`).
     """
+    if mode is not None and str(mode).upper() == "WV":
+        return _estimate_wv_geometry(sar_polygon, ref_lon, ref_lat, r_s_km, orbit_direction)
     corners = _as_point_array(sar_polygon)[:4]
     if mode is not None and (ref_lon is None) != (ref_lat is None):
         raise ValueError("ref_lon and ref_lat must be given together")
@@ -127,4 +181,5 @@ def estimate_geometry(
         beam=angles.beam,
         incidence_deg=angles.incidence_deg,
         elevation_deg=angles.elevation_deg,
+        r_s_km=angles.r_s_km,
     )

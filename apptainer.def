@@ -1,6 +1,9 @@
 Bootstrap: docker
 From: python:3.11-slim
 
+%arguments
+    VERSION=0+container
+
 # Build from a checkout of this repository:
 #
 #     apptainer build /tmp/s1-geometry.sif apptainer.def
@@ -16,7 +19,10 @@ From: python:3.11-slim
     src /opt/s1-geometry/src
 
 %post
-    python -m pip install --no-cache-dir -e /opt/s1-geometry
+    # no .git in the image: give hatch-vcs the version explicitly, e.g.
+    #     apptainer build --build-arg VERSION=2026.11.20 s1-geometry.sif apptainer.def
+    export SETUPTOOLS_SCM_PRETEND_VERSION={{ VERSION }}
+    python -m pip install --no-cache-dir /opt/s1-geometry
 
 %environment
     export PYTHONUNBUFFERED=1
@@ -29,8 +35,8 @@ From: python:3.11-slim
     org.soba.description Geometric quantities from a Sentinel-1 SAR footprint
 
 %help
-    Estimate the ground heading of a Sentinel-1 IW acquisition from its
-    SAFE footprint polygon:
+    Estimate Sentinel-1 geometric quantities from the footprint metadata,
+    e.g. the ground heading of an IW acquisition from its SAFE footprint:
 
         apptainer run --bind /path/to/footprints:/footprints s1-geometry.sif \
             heading /footprints/footprint.geojson --lat 36.59

@@ -9,8 +9,8 @@ from s1_geometry import (
     R_E_KM,
     R_S_MAX_KM,
     R_S_MIN_KM,
-    S1Angles,
     SM_BEAM_SIGMA,
+    S1Angles,
     dfrac_of_point,
     estimate_incidence_elevation,
     sar_elevation_angle,
@@ -28,9 +28,9 @@ from s1_geometry.angles import (
     geocentric_radius_km,
     incidence_offnadir_deg,
     mode_slant_ranges,
+    sigma_of_r_s,
     slant_from_incidence,
     solve_rs_from_width,
-    sigma_of_r_s,
     width_const_slant_km,
 )
 from tests.rings import (
@@ -364,7 +364,7 @@ def test_sm_beam_sigma_spec_values():
         # the near edge always looks closer than the far edge of the beam
         assert sn_min < sf_min and sn_max < sf_max
         # the whole SM incidence range is documented as 18.3 to 46.8 deg
-        assert 17.0 <= sn_min and sf_max <= 48.0
+        assert sn_min >= 17.0 and sf_max <= 48.0
         _ = beam
 
 

@@ -1,4 +1,4 @@
-"""Tests for the WV (wide-swath) angle estimation (s1_geometry.wv).
+"""Tests for the WV (Wave mode) angle estimation (s1_geometry.wv).
 
 The synthetic footprint generator places a satellite on a circular orbit at
 geocentric distance ``r_s`` looking right at two fixed off-nadir angles and
@@ -239,7 +239,7 @@ def test_estimate_wv_angles_rejects_out_of_band_r_s():
     rings, _, _ = _synthetic_wv(n_bursts=8)
     lons = np.array([np.mean([v[0] for v in r]) for r in rings])
     lats = np.array([np.mean([v[1] for v in r]) for r in rings])
-    with pytest.raises(ValueError, match="altitude band"):
+    with pytest.raises(ValueError, match="orbit range"):
         estimate_wv_angles(rings, 5000.0, lons, lats)
 
 
@@ -247,5 +247,81 @@ def test_estimate_wv_angles_rejects_too_few_rings():
     rings, _, _ = _synthetic_wv(n_bursts=3)
     lons = np.array([np.mean([v[0] for v in r]) for r in rings])
     lats = np.array([np.mean([v[1] for v in r]) for r in rings])
-    with pytest.raises(ValueError, match="at least 4 burst rings"):
+    with pytest.raises(ValueError, match="at least 4 imagette rings"):
         estimate_wv_angles(rings, 7085.0, lons, lats)
+
+
+def _centres(rings):
+    lons = np.array([np.mean([v[0] for v in r[:-1]]) for r in rings])
+    lats = np.array([np.mean([v[1] for v in r[:-1]]) for r in rings])
+    return lons, lats
+
+
+def test_estimate_wv_angles_accepts_high_latitude_r_s():
+    # 7066 km is a real Sentinel-1 geocentric distance (polar part of the
+    # orbit); the former band (6371 + 697.6 km) wrongly rejected it
+    rings, _, _ = _synthetic_wv(r_s_km=7066.0, n_bursts=8)
+    lons, lats = _centres(rings)
+    result = estimate_wv_angles(rings, 7066.0, lons, lats)
+    assert np.isfinite(result.incidence_deg).all()
+
+
+def test_estimate_wv_angles_r_s_from_orbit_model():
+    # metadata-only chain: no r_s given, the orbit model provides it
+    # short product (8 imagettes, 400 km): r_s barely varies along it
+    rings, _, truth = _synthetic_wv(r_s_km=7077.0, n_bursts=8, along_track_km=50.0)
+    lons, lats = _centres(rings)
+    result = estimate_wv_angles(rings, None, lons, lats)
+    assert R_S_MIN_KM - 10.0 < result.r_s_km < R_S_MAX_KM
+    explicit = estimate_wv_angles(rings, result.r_s_km, lons, lats)
+    np.testing.assert_allclose(result.incidence_deg, explicit.incidence_deg, atol=0.05)
+    # same order of accuracy as with the true r_s
+    assert np.abs(result.incidence_deg - truth["inc"]).mean() < 1.0
+    # an explicit orbit direction is accepted too
+    asc = estimate_wv_angles(rings, None, lons, lats, orbit_direction="ASCENDING")
+    assert np.isfinite(asc.incidence_deg).all()
+
+
+def test_estimate_wv_angles_window_matches_full_fit_on_great_circle():
+    # on a great-circle track the sliding-window fit equals the global fit
+    rings, subswaths, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=30)
+    lons, lats = _centres(rings)
+    full = estimate_wv_angles(rings, 7077.0, lons, lats)
+    win = estimate_wv_angles(rings, 7077.0, lons, lats, window=4)
+    # the track geometry is the same; the incidence only differs through the
+    # latitude term of the look-angle law (window mean latitude instead of the
+    # product mean latitude, the synthetic product spans ~40 deg of latitude)
+    np.testing.assert_allclose(win.incidence_deg, full.incidence_deg, atol=0.3)
+    assert np.abs(_daz(win.heading_deg, full.heading_deg)).max() < 0.1
+    assert np.array_equal(win.subswath, subswaths)
+    with pytest.raises(ValueError, match="window"):
+        estimate_wv_angles(rings, 7077.0, lons, lats, window=1)
+
+
+def test_estimate_wv_angles_outside_point():
+    rings, _, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=8)
+    lons, lats = _centres(rings)
+    far_lon, far_lat = np.append(lons, lons[0] + 30.0), np.append(lats, lats[0])
+    with pytest.raises(ValueError, match="outside the WV footprint"):
+        estimate_wv_angles(rings, 7077.0, far_lon, far_lat)
+    result = estimate_wv_angles(rings, 7077.0, far_lon, far_lat, on_outside="nan")
+    assert np.isnan(result.incidence_deg[-1]) and np.isnan(result.heading_deg[-1])
+    assert np.isfinite(result.incidence_deg[:-1]).all()
+    with pytest.raises(ValueError, match="on_outside"):
+        estimate_wv_angles(rings, 7077.0, lons, lats, on_outside="skip")
+
+
+def test_estimate_wv_angles_accepts_odata_wkt():
+    rings, _, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=8)
+    lons, lats = _centres(rings)
+    wkt = "geography'SRID=4326;MULTIPOLYGON (" + ", ".join(
+        "((" + ", ".join(f"{lo} {la}" for lo, la in r) + "))" for r in rings) + ")'"
+    from_wkt = estimate_wv_angles(wkt, 7077.0, lons, lats)
+    from_list = estimate_wv_angles(rings, 7077.0, lons, lats)
+    np.testing.assert_allclose(from_wkt.incidence_deg, from_list.incidence_deg)
+
+
+def test_single_imagette_is_rejected_with_a_hint():
+    rings, _, _ = _synthetic_wv(n_bursts=8)
+    with pytest.raises(ValueError, match="single imagette"):
+        estimate_wv_angles(rings[:1], 7077.0, 0.0, 0.0)
