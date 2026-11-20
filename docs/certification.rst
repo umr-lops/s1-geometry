@@ -14,10 +14,6 @@ All the figures and tables of this page are produced by
 ``scripts/validate_wv_ocn.py`` (WV); the per-example statistics are in
 ``_static/certification/stats.json``.
 
-.. contents:: On this page
-   :local:
-   :depth: 1
-
 .. include:: _generated/example_products.inc
 
 

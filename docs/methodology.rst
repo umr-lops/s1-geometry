@@ -5,10 +5,6 @@ This page explains, in plain words, what s1-geometry needs as input, how it
 turns that input into angles, and how each model was calibrated and checked.
 It is a short *Algorithm Theoretical Basis Document* (ATBD).
 
-.. contents:: On this page
-   :local:
-   :depth: 1
-
 
 The idea in one paragraph
 -------------------------
