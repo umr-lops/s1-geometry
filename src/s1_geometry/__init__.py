@@ -55,6 +55,7 @@ from s1_geometry.wv import (
     WV_THETA_DOC,
     S1WVAngles,
     estimate_wv_angles,
+    wv_footprint_from_imagettes,
     wv_theta_deg,
 )
 
@@ -103,5 +104,6 @@ __all__ = [
     "sar_incidence_angle",
     "satellite_radius_km",
     "swath_width_km",
+    "wv_footprint_from_imagettes",
     "wv_theta_deg",
 ]

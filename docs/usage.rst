@@ -99,6 +99,16 @@ footprint in a column; needs the ``parquet`` extra)::
    # new columns: sar_incidence_angle, sar_elevation_angle, sar_ground_heading,
    #              sar_wv_subswath
 
+When the product footprint is not available **in time order** but the
+imagettes are -- the OData ``Imagettes`` expansion (each with its ``index``
+and ``GeoFootprint``) or a set of STAC imagette items -- rebuild it first::
+
+   from s1_geometry import estimate_wv_angles, wv_footprint_from_imagettes
+
+   rings = wv_footprint_from_imagettes(product["Imagettes"])   # sorted by "index"
+   wv = estimate_wv_angles(rings, None, lons, lats, on_outside="nan")
+   # wv.ring_index == imagette index - 1, wv.subswath == 1 / 2 (WV1 / WV2)
+
 A **single imagette polygon is not enough**: the two subswath chains of the
 product are needed to locate the track plane, so a product needs at least 4
 imagettes.  The rings must be **in time order** (the order of the CDSE
