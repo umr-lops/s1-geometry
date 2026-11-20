@@ -19,6 +19,8 @@ from tests.rings import (
     ASC_RING,
     ASC_RING_CW,
     DESC_RING,
+    EW_RING,
+    F512_NEAR_SQUARE_RING,
     SM_ASC_RING,
     SM_ASC_RING_CW,
     SM_DESC_RING,
@@ -35,6 +37,13 @@ from tests.rings import (
         (DESC_RING, DESCENDING),
         (TURN_RING, TURNING),
         (ASC_RING[:4], ASCENDING),  # open ring (no repeated first vertex)
+        # near-square IW ring (families within 5 % in length): the edge-
+        # length heuristic misclassified it (issue #6); width inversion gives
+        # the correct ascending pass
+        (F512_NEAR_SQUARE_RING, ASCENDING),
+        # near-square EW ring (width-inversion family = standard, the same as
+        # the edge-length heuristic): the direction must stay unchanged
+        (EW_RING, ASCENDING),
         # product-page vertex order (clockwise): the same products as the
         # standard-order rings above, plus the real descending ring reported
         # as a bug (CDSE product page, ~47 N)
