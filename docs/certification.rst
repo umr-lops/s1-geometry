@@ -177,6 +177,79 @@ WV
 | descending| heading   | 7,200  | 0.091   | -0.089  | 0.111    |
 +-----------+-----------+--------+---------+---------+----------+
 
+Sentinel-1A / -1C / -1D statistical validation (metadata only)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``scripts/validate_wv_ocn.py`` runs the metadata-only chain -- the product
+footprint (the ``manifest.safe`` imagette rings, identical to the CDSE OData
+``Footprint``), ``r_s`` from the orbit model of :mod:`s1_geometry.orbit`,
+``window="auto"`` -- on every ``owi`` cell of every imagette (the ``osw``
+imagette centre for the products before mid-2020, whose WV ``owi`` grid is
+empty).  Sample: one day per month (three products per day spread over the
+day) for S1C (2025-2026) and S1D (2026), S1A 2025-2026 plus one day per year
+2015-2024; 164 products, latitudes -80 to +52 deg, up to 143 imagettes,
+2,974,963 cells.  Per product statistics:
+``_static/certification/wv_validation_s1acd.csv``.
+
+Look-angle law recalibration.  The first law (a linear latitude term fitted
+on 64 mostly southern-hemisphere products) had an incidence bias growing in
+the northern hemisphere (+0.6 deg at 30 N, +0.9 deg at 45-50 N).  The latitude
+term is now a degree-5 polynomial, fitted by
+``scripts/calibrate_wv_look_angle.py`` (one Newton step per imagette on the
+incidence error) on 62,588 imagettes of 1,205 S1C / S1D products of *other*
+days than the validation sample (latitudes -79.5 to +86 deg); S1A is not used
+in the fit.
+
++-----------+-----------+--------------+-------------+--------------+------------+
+| satellite | products  | incidence    | elevation   | heading      | inc. max   |
+|           |           | RMSE (deg)   | RMSE (deg)  | RMSE (deg)   | abs. error |
++===========+===========+==============+=============+==============+============+
+| S1A       | 75        | 0.021        | 0.033       | 0.097        | 0.159      |
++-----------+-----------+--------------+-------------+--------------+------------+
+| S1C       | 57        | 0.019        | 0.032       | 0.096        | 0.163      |
++-----------+-----------+--------------+-------------+--------------+------------+
+| S1D       | 32        | 0.069        | 0.065       | 0.123        | 0.475      |
++-----------+-----------+--------------+-------------+--------------+------------+
+| all       | 164       | 0.036        | 0.041       | 0.103        | 0.475      |
++-----------+-----------+--------------+-------------+--------------+------------+
+| first law | 163       | 0.233        | 0.224       | 0.098        | 1.634      |
++-----------+-----------+--------------+-------------+--------------+------------+
+
+Subswath (WV1 / WV2) labels are 100 % correct and no cell falls outside the
+footprint.  The incidence bias is below 0.08 deg in every latitude band.  The
+heading p95 error of the worst product is 0.36 deg (S1D products through the
+polar turn), hence the WV heading uncertainty of 0.4 deg.  Long products need
+the sliding-window track fit (``window="auto"``): with a single track geometry
+their heading RMSE is 0.36 instead of 0.09 deg.
+
+Excluded from the statistics:
+
+* the S1C commissioning phase (before 2025-03-08, no S1C POEORB, orbit not
+  yet the reference one);
+* end-of-datatake products with 2 imagettes (at least 4 are needed);
+* reference headings known to be wrong: ``owiHeading`` of the IPF 003.31
+  products (2021: 357 deg on a descending pass), imagettes whose
+  ``owiHeading`` is constant at 90.0004 deg (an ESA default value, seen near
+  the antimeridian), and ``oswHeading`` (before mid-2020; a different
+  quantity, 1-6 deg away from the ground-track heading).
+
+The centre of an imagette ring is the mean of its *closed* ring vertices (the
+first vertex counted twice), the convention of the CDSE footprints the
+look-angle law is calibrated with.
+
+Orbit model stability
+^^^^^^^^^^^^^^^^^^^^^
+
+All Sentinel-1 units fly the same reference orbit, only phased differently,
+so ``r_s(lat, pass)`` does not depend on the unit or on its slot.  Checked
+on POEORB files from 2025-01 to 2026-10 (S1A, S1C, S1D monthly, S1C every 3
+days from April to July 2026 around its move to the former S1A slot;
+``_static/certification/orbit_r_s_drift_2025_2026.csv``): bias within
+0.03 km and residual std 0.10-0.11 km on every day, except the S1C
+commissioning (2025-03-15, -1.9 km) and 2026-06-21 (+1.9 km), during the S1C
+relocation when S1C acquired nothing (no product from 2026-06-09 to
+2026-06-23).  1 km of ``r_s`` error is ~0.06 deg of incidence.
+
 SM
 ^^^
 

@@ -13,6 +13,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the version is the git tag (hatch-vcs)
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"

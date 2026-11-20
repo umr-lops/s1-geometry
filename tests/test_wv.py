@@ -1,4 +1,4 @@
-"""Tests for the WV (wide-swath) angle estimation (s1_geometry.wv).
+"""Tests for the WV (Wave mode) angle estimation (s1_geometry.wv).
 
 The synthetic footprint generator places a satellite on a circular orbit at
 geocentric distance ``r_s`` looking right at two fixed off-nadir angles and
@@ -20,6 +20,7 @@ from s1_geometry import (
     S1WVAngles,
     as_multipolygon,
     estimate_wv_angles,
+    merge_antimeridian_splits,
     wv_theta_deg,
 )
 
@@ -239,7 +240,7 @@ def test_estimate_wv_angles_rejects_out_of_band_r_s():
     rings, _, _ = _synthetic_wv(n_bursts=8)
     lons = np.array([np.mean([v[0] for v in r]) for r in rings])
     lats = np.array([np.mean([v[1] for v in r]) for r in rings])
-    with pytest.raises(ValueError, match="altitude band"):
+    with pytest.raises(ValueError, match="orbit range"):
         estimate_wv_angles(rings, 5000.0, lons, lats)
 
 
@@ -247,5 +248,145 @@ def test_estimate_wv_angles_rejects_too_few_rings():
     rings, _, _ = _synthetic_wv(n_bursts=3)
     lons = np.array([np.mean([v[0] for v in r]) for r in rings])
     lats = np.array([np.mean([v[1] for v in r]) for r in rings])
-    with pytest.raises(ValueError, match="at least 4 burst rings"):
+    with pytest.raises(ValueError, match="at least 4 imagette rings"):
         estimate_wv_angles(rings, 7085.0, lons, lats)
+
+
+def _centres(rings):
+    lons = np.array([np.mean([v[0] for v in r[:-1]]) for r in rings])
+    lats = np.array([np.mean([v[1] for v in r[:-1]]) for r in rings])
+    return lons, lats
+
+
+def test_estimate_wv_angles_accepts_high_latitude_r_s():
+    # 7066 km is a real Sentinel-1 geocentric distance (polar part of the
+    # orbit); the former band (6371 + 697.6 km) wrongly rejected it
+    rings, _, _ = _synthetic_wv(r_s_km=7066.0, n_bursts=8)
+    lons, lats = _centres(rings)
+    result = estimate_wv_angles(rings, 7066.0, lons, lats)
+    assert np.isfinite(result.incidence_deg).all()
+
+
+def test_estimate_wv_angles_r_s_from_orbit_model():
+    # metadata-only chain: no r_s given, the orbit model provides it
+    # short product (8 imagettes, 400 km): r_s barely varies along it
+    rings, _, truth = _synthetic_wv(r_s_km=7077.0, n_bursts=8, along_track_km=50.0)
+    lons, lats = _centres(rings)
+    result = estimate_wv_angles(rings, None, lons, lats)
+    assert R_S_MIN_KM - 10.0 < result.r_s_km < R_S_MAX_KM
+    explicit = estimate_wv_angles(rings, result.r_s_km, lons, lats)
+    np.testing.assert_allclose(result.incidence_deg, explicit.incidence_deg, atol=0.05)
+    # same order of accuracy as with the true r_s
+    assert np.abs(result.incidence_deg - truth["inc"]).mean() < 1.0
+    # an explicit orbit direction is accepted too
+    asc = estimate_wv_angles(rings, None, lons, lats, orbit_direction="ASCENDING")
+    assert np.isfinite(asc.incidence_deg).all()
+
+
+def test_estimate_wv_angles_window_matches_full_fit_on_great_circle():
+    # on a great-circle track the sliding-window fit equals the global fit
+    rings, subswaths, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=30)
+    lons, lats = _centres(rings)
+    full = estimate_wv_angles(rings, 7077.0, lons, lats)
+    win = estimate_wv_angles(rings, 7077.0, lons, lats, window=4)
+    # same track geometry, and the look-angle law uses each imagette's own
+    # latitude in both cases
+    np.testing.assert_allclose(win.incidence_deg, full.incidence_deg, atol=0.02)
+    assert np.abs(_daz(win.heading_deg, full.heading_deg)).max() < 0.1
+    assert np.array_equal(win.subswath, subswaths)
+    with pytest.raises(ValueError, match="window"):
+        estimate_wv_angles(rings, 7077.0, lons, lats, window=1)
+
+
+def test_estimate_wv_angles_outside_point():
+    rings, _, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=8)
+    lons, lats = _centres(rings)
+    far_lon, far_lat = np.append(lons, lons[0] + 30.0), np.append(lats, lats[0])
+    with pytest.raises(ValueError, match="outside the WV footprint"):
+        estimate_wv_angles(rings, 7077.0, far_lon, far_lat)
+    result = estimate_wv_angles(rings, 7077.0, far_lon, far_lat, on_outside="nan")
+    assert np.isnan(result.incidence_deg[-1]) and np.isnan(result.heading_deg[-1])
+    assert np.isfinite(result.incidence_deg[:-1]).all()
+    with pytest.raises(ValueError, match="on_outside"):
+        estimate_wv_angles(rings, 7077.0, lons, lats, on_outside="skip")
+
+
+def test_estimate_wv_angles_accepts_odata_wkt():
+    rings, _, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=8)
+    lons, lats = _centres(rings)
+    wkt = "geography'SRID=4326;MULTIPOLYGON (" + ", ".join(
+        "((" + ", ".join(f"{lo} {la}" for lo, la in r) + "))" for r in rings) + ")'"
+    from_wkt = estimate_wv_angles(wkt, 7077.0, lons, lats)
+    from_list = estimate_wv_angles(rings, 7077.0, lons, lats)
+    np.testing.assert_allclose(from_wkt.incidence_deg, from_list.incidence_deg)
+
+
+def test_single_imagette_is_rejected_with_a_hint():
+    rings, _, _ = _synthetic_wv(n_bursts=8)
+    with pytest.raises(ValueError, match="single imagette"):
+        estimate_wv_angles(rings[:1], 7077.0, 0.0, 0.0)
+
+
+def _split_at_antimeridian(ring):
+    """Cut a ring (unwrapped lon around 180) into the two OData-style pieces."""
+    pts = np.asarray(ring)[:-1]
+    pieces = []
+    for side in (1.0, -1.0):  # +180 side keeps lon <= 180, -180 side lon >= 180
+        keep = (lambda p: p[0] <= 180.0) if side > 0 else (lambda p: p[0] >= 180.0)
+        out = []
+        for k in range(len(pts)):
+            p, q = pts[k], pts[(k + 1) % len(pts)]
+            if keep(p):
+                out.append(p)
+            if keep(p) != keep(q):
+                t = (180.0 - p[0]) / (q[0] - p[0])
+                out.append(np.array([180.0, p[1] + t * (q[1] - p[1])]))
+        out = np.array(out)
+        out[:, 0] = np.where(out[:, 0] > 180.0 - 1e-12, out[:, 0] - 360.0, out[:, 0]) \
+            if side < 0 else out[:, 0]
+        pieces.append(np.vstack([out, out[:1]]))
+    # time order of the pieces does not matter; -180 piece first like the CDSE
+    return [pieces[1], pieces[0]]
+
+
+def test_antimeridian_split_imagette_is_rejoined():
+    rings, subswaths, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=10, along_track_km=60.0)
+    lons, lats = _centres(rings)
+    k = 5
+    shift = 180.013 - lons[k]  # ring k straddles the antimeridian (no corner on it)
+    shifted = [[(lo + shift, la) for lo, la in r] for r in rings]
+    wrap = [[((lo + 180.0) % 360.0 - 180.0, la) for lo, la in r] for r in shifted]
+    pieces = _split_at_antimeridian(shifted[k])
+    split = wrap[:k] + pieces + wrap[k + 1:]
+    assert len(split) == len(rings) + 1
+    merged = merge_antimeridian_splits(as_multipolygon(split))
+    assert len(merged) == len(rings)
+    # the merged ring holds exactly the original corners (unwrapped)
+    orig = np.asarray(shifted[k])[:-1] - [360.0, 0.0]
+    got = merged[k][:-1]
+    assert len(got) == len(orig)
+    assert np.abs(np.sort(got, axis=0) - np.sort(orig, axis=0)).max() < 1e-6
+    # end to end: same result as the unsplit footprint with that merged ring
+    plon = (lons + shift + 180.0) % 360.0 - 180.0
+    res = estimate_wv_angles(split, 7077.0, plon, lats)
+    ref = estimate_wv_angles(wrap[:k] + [merged[k]] + wrap[k + 1:], 7077.0, plon, lats)
+    assert res.n_rings == len(rings)
+    np.testing.assert_array_equal(res.subswath, subswaths)
+    np.testing.assert_array_equal(res.ring_index, np.arange(len(rings)))
+    np.testing.assert_allclose(res.incidence_deg, ref.incidence_deg, atol=1e-9)
+
+
+def test_open_and_closed_rings_give_the_same_result():
+    rings, _, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=8, along_track_km=60.0)
+    lons, lats = _centres(rings)
+    closed = estimate_wv_angles(rings, 7077.0, lons, lats)
+    opened = estimate_wv_angles([r[:-1] for r in rings], 7077.0, lons, lats)
+    np.testing.assert_allclose(opened.incidence_deg, closed.incidence_deg)
+
+
+def test_rings_not_in_time_order_are_rejected():
+    rings, _, _ = _synthetic_wv(r_s_km=7077.0, n_bursts=12, along_track_km=60.0)
+    lons, lats = _centres(rings)
+    order = list(range(0, 12, 2)) + list(range(1, 12, 2))  # WV1 chain then WV2 chain
+    with pytest.raises(ValueError, match="time order"):
+        estimate_wv_angles([rings[i] for i in order], 7077.0, lons, lats)

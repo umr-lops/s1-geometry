@@ -1,20 +1,26 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "s1-geometry"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Tool to estimate geometric quantities (such as incidence, elevation or ground heading angle) from a Sentinel-1 SAR footprint."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
+keywords = ["sentinel-1", "sar", "incidence angle", "heading", "wave mode", "copernicus"]
 classifiers = [
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
   "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
-  "Topic :: Scientific/Engineering",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
   "numpy",
@@ -24,12 +30,19 @@ dependencies = [
 # Needed only by the CDSE daily-Parquet footprint indexer (load_sar_polygons).
 parquet = ["pandas", "pyarrow"]
 docs = ["sphinx", "furo", "myst-parser"]
+test = ["pytest", "pytest-cov", "pandas", "pyarrow"]
 
 [project.scripts]
 s1-geometry = "s1_geometry.cli:main"
 
 [project.urls]
 Repository = "https://github.com/umr-lops/s1-geometry"
+Documentation = "https://s1-geometry.readthedocs.io"
+Issues = "https://github.com/umr-lops/s1-geometry/issues"
+Changelog = "https://github.com/umr-lops/s1-geometry/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/s1_geometry"]
@@ -43,4 +56,4 @@ addopts = "-q"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]

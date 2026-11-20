@@ -41,8 +41,8 @@ and far range lines, while the five EW subswaths (EW1..EW5) are acquired
 with five discrete beams.  The per-subswath RMSE is 0.8–1.9 deg; the bias
 is a model behaviour, not a bug.
 
-WV (wide swath)
----------------
+WV (Wave mode)
+--------------
 
 ``S1D_WV_OCN__2SSV_20260828T233712_20260828T234055_004332_007FE6_03DE.SAFE``
 (2026-08-28, ascending, 16 bursts, r_s = 7079.8 km from the OCN state

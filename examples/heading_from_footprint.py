@@ -23,10 +23,7 @@ EXAMPLE_ASC_RING = [
 
 
 def main() -> int:
-    if len(sys.argv) >= 2:
-        polygon = Path(sys.argv[1]).read_text()
-    else:
-        polygon = EXAMPLE_ASC_RING
+    polygon = Path(sys.argv[1]).read_text() if len(sys.argv) >= 2 else EXAMPLE_ASC_RING
     ref_lat = float(sys.argv[2]) if len(sys.argv) >= 3 else None
 
     result = estimate_geometry(polygon, ref_lat=ref_lat)

@@ -1,12 +1,26 @@
 # s1-geometry
 
-Tool to estimate geometric quantities (such as incidence, elevation or
-ground heading angle) from a Sentinel-1 SAR footprint.
+[![CI](https://github.com/umr-lops/s1-geometry/actions/workflows/ci.yml/badge.svg)](https://github.com/umr-lops/s1-geometry/actions/workflows/ci.yml)
+[![Docs](https://readthedocs.org/projects/s1-geometry/badge/?version=latest)](https://s1-geometry.readthedocs.io)
+[![PyPI](https://img.shields.io/pypi/v/s1-geometry.svg)](https://pypi.org/project/s1-geometry/)
+[![Python](https://img.shields.io/pypi/pyversions/s1-geometry.svg)](https://pypi.org/project/s1-geometry/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-The current release (v0.2) provides the **IW ground heading** as a function
-of the reference point and the SAFE footprint polygon, with a
-latitude-dependent uncertainty, and the **incidence / elevation angles** of
-IW and EW acquisitions at a reference point.
+Tool to estimate geometric quantities (such as incidence, elevation or
+ground heading angle) from a Sentinel-1 SAR footprint, **from the catalogue
+metadata only** (e.g. the CDSE OData `Footprint`): no SAR data, no orbit
+file.
+
+It provides:
+
+- the **IW ground heading** as a function of the reference point and the
+  SAFE footprint polygon, with a latitude-dependent uncertainty;
+- the **incidence / elevation angles** of IW, EW (validated) and SM
+  (spec-based) acquisitions at a reference point;
+- the **WV (Wave mode) incidence / elevation / heading** at reference points,
+  from the product footprint (one ring per imagette) and a metadata-only model
+  of the satellite distance.
 
 ## Install
 
@@ -21,7 +35,8 @@ python -m pip install -e .
 python -m pip install -e '.[parquet]'
 ```
 
-Python >= 3.11 is required; the only hard dependency is `numpy`.
+Python >= 3.11 is required; the only hard dependency is `numpy` (`pandas` for the
+table helper and the Parquet indexer, via the `parquet` extra).
 
 ## Usage
 
@@ -70,7 +85,7 @@ angles.dfrac            # 0 = near range line, 1 = far range line
 angles.swath_width_km   # across-track ground width of the footprint (km)
 angles.r_s_km           # inverted satellite geocentric distance (km)
 angles.incidence_deg    # incidence angle from the local vertical (deg)
-angles.elevation_deg    # 90 - incidence (deg, exact)
+angles.elevation_deg    # radar elevation angle = off-nadir angle (deg, ESA OCN convention)
 ```
 
 The same quantities are available on the generic entry point
@@ -78,6 +93,42 @@ The same quantities are available on the generic entry point
 and through the catalogue-oriented functions `sar_incidence_angle(...)` /
 `sar_elevation_angle(...)` (the functions behind the `sar_incidence_angle` /
 `sar_elevation_angle` columns).
+
+#### WV (Wave mode), from the OData metadata only
+
+The WV product footprint (the CDSE OData `Footprint` WKT, or the
+`GeoFootprint` GeoJSON) is a MultiPolygon with one small ring per imagette,
+in time order. The satellite geocentric distance comes from a metadata-only
+orbit model (`satellite_radius_km(lat, orbit_direction)`, 0.1 km accuracy
+against the POEORB state vectors of S1A/S1C/S1D), so nothing else is needed:
+
+```python
+from s1_geometry import estimate_geometry, estimate_wv_angles
+
+geo = estimate_geometry(odata_footprint, ref_lon=-76.7, ref_lat=-29.3, mode="WV")
+geo.incidence_deg, geo.elevation_deg, geo.heading_deg, geo.subswath, geo.r_s_km
+
+wv = estimate_wv_angles(odata_footprint, None, lons, lats)  # vectorised, per point
+```
+
+Add the columns to a table of reference points (one row per point, the
+product footprint in a column):
+
+```python
+import pandas as pd
+from s1_geometry.table import add_wv_angle_columns
+
+df = add_wv_angle_columns(pd.read_parquet("wv.parquet"),
+                          footprint="Footprint", lon="ref_lon", lat="ref_lat")
+# + sar_incidence_angle, sar_elevation_angle, sar_ground_heading, sar_wv_subswath
+```
+
+A **single imagette polygon is not enough** (the two subswath chains of the
+product locate the track plane): pass the product footprint (at least 4
+imagettes), with the rings **in time order** — the CDSE `Footprint` /
+`GeoFootprint`, not the re-ordered `geometry` column of the daily Parquets
+(it is detected and rejected). Imagettes split at the antimeridian are
+re-joined.
 
 The reference point must lie **inside the SAFE footprint** (the 4-vertex
 parallelogram, boundary included).  If it is outside,
@@ -91,6 +142,7 @@ s1-geometry heading footprint.geojson --lat 36.59
 s1-geometry heading '{"type": "Polygon", "coordinates": [[...]]}' --lat 36.59 --json
 s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode IW
 s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --json
+s1-geometry wv "geography'SRID=4326;MULTIPOLYGON (((...)), ...)'" --lon -76.7 --lat -29.3
 ```
 
 The polygon argument is a GeoJSON file path or an inline JSON string: a
@@ -146,7 +198,10 @@ against the ESA / SentiWiki documented angles to <= 0.07 deg):
   the geocentric incidence is the closed form
   `theta_c = asin[(R_s/R_e) * sin(sigma)]`; the local (ellipsoid-normal)
   incidence adds the deflection of the vertical (max ~0.19 deg near
-  |lat| = 45 deg) and the elevation is exactly `90 deg - incidence`.
+  |lat| = 45 deg). The returned elevation is the radar elevation angle of
+  the ESA L2 OCN `*ElevationAngle` convention (the angle at the satellite
+  between nadir and the line of sight, i.e. the off-nadir angle sigma), not
+  `90 deg - incidence`.
 
 The reference point selects sigma through its across-track position
 `dfrac` (0 = near range line, 1 = far range line). Full-swath footprints are
@@ -185,20 +240,44 @@ per-sub-swath angles to <= 0.07 deg, and the full chain (ring -> W -> R_s ->
 incidence) is simulated to <= 0.11 deg (IW) and <= 0.05 deg (EW) maximum
 error.
 
+The **WV satellite distance** model (`s1_geometry.orbit`) is fitted on 37444
+POEORB state vectors (S1A 2026-06-29, S1C 2025-12-10, S1D 2026-05-11 and
+2026-10-29; `scripts/calibrate_orbit_radius.py`, public `s1-orbits` bucket):
+residual std 0.10 km, max 0.29 km at the WV1 / WV2 target latitudes, bias
+per satellite below 0.04 km (~0.02 deg of incidence). The WV angle chain is
+validated, from the footprint metadata only, against the ESA L2 OCN grid of
+**164 products of Sentinel-1A (2015-2026, not used in the calibration), -1C
+and -1D** (latitudes -80 to +52 deg, up to 143 imagettes, 2.97 million
+cells): **RMSE incidence 0.036 deg, elevation 0.041 deg, heading 0.10 deg**
+(S1A alone: 0.021 / 0.033 / 0.10 deg), subswath labels 100 % correct
+(`scripts/validate_wv_ocn.py`). The look-angle law latitude term is fitted
+on 62588 imagettes of other S1C / S1D days (`scripts/calibrate_wv_look_angle.py`).
+The heading uncertainty returned for WV is 0.4 deg (p95 of the worst product,
+through the polar turn). Long products need the sliding-window track fit
+(`window="auto"`, default). The orbit model is unit- and slot-independent
+(checked across the 2026 S1C relocation). Not covered: products with fewer
+than 4 imagettes, the commissioning phase of a satellite.
+
 ## Roadmap
 
 - [x] IW ground heading `sar_ground_heading = F(ref_lat, SAR_polygon)` + U(lat)
-- [x] Incidence angle estimator `sar_incidence_angle` (IW + EW)
-- [x] Elevation angle estimator `sar_elevation_angle` (IW + EW)
+- [x] Incidence angle estimator `sar_incidence_angle` (IW + EW, SM spec-based)
+- [x] Elevation angle estimator `sar_elevation_angle` (IW + EW, SM spec-based)
+- [x] WV incidence / elevation / heading from the OData metadata only
+- [x] WV validation on S1A / S1C / S1D (164 products, -80 to +52 deg)
+- [x] WV look-angle law recalibrated (northern-hemisphere bias removed)
+- [x] WV heading uncertainty (0.4 deg)
 
 ## Development
 
 ```bash
-python -m pip install -e '.[parquet]' pytest pre-commit
+python -m pip install -e '.[parquet,test]' pre-commit
 pre-commit run --all-files   # ruff + file hygiene
 python -m pytest -q          # test suite
 ```
 
-GitHub workflows: `CI` (pre-commit + pytest), `Build` (wheel + CLI smoke
-test), `Docs` (sphinx), `Publish` (PyPI on release). Container image:
+GitHub workflows: `CI` (pre-commit, pytest + coverage on Python 3.11-3.13,
+examples), `Build` (wheel + CLI smoke test), `Docs` (sphinx -W), `Publish`
+(PyPI on release; the version is the git tag, via `hatch-vcs`). See
+[CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md). Container image:
 `apptainer build s1-geometry.sif apptainer.def`.

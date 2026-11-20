@@ -51,7 +51,7 @@ def add_angles(df: pd.DataFrame, mode_column: str = "Mode") -> pd.DataFrame:
     else:
         modes = [_mode_from_name(name) for name in df["Name"]]
     rows = []
-    for row, mode in zip(df.itertuples(index=False), modes):
+    for row, mode in zip(df.itertuples(index=False), modes, strict=True):
         try:
             result = estimate_incidence_elevation(
                 row.GeoFootprint, float(row.ref_lon), float(row.ref_lat), mode)

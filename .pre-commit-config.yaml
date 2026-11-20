@@ -21,7 +21,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: /scratch/agrouaze/opencode_sandbox/micromamba/envs/dev-agent/bin/python -m pytest -q
+        entry: python -m pytest -q
         language: system
         pass_filenames: false
         # not part of a normal commit: use `pre-commit run --hook-stage manual pytest`

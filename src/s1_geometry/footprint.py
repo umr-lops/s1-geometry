@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -60,20 +61,62 @@ _DEGEN_FAMILY_KM = 2.0
 _SM_BAND_LO_KM = 72.0
 _SM_BAND_HI_KM = 88.0
 
+#: Longest-edge length (km) below which a ring is too small to be a SAFE
+#: swath footprint (e.g. a ~20 km WV imagette): its orbit direction is not
+#: identifiable from the ring alone.
+_MIN_SWATH_EDGE_KM = 40.0
+
 #: Long / short opposite-edge family ratio below which an SM-like ring is
 #: treated as near-square instead (an SM burst shorter than ~15 s is nearly
 #: square and falls back to the standard-CDSE-order assumption).
 _SM_MIN_ASPECT_RATIO = 1.2
 
 
+_WKT_PREFIX = re.compile(r"^\s*(?:geography\s*')?\s*(?:SRID=\d+\s*;)?\s*", re.IGNORECASE)
+_WKT_PAIR = re.compile(r"([-+]?[\d.]+(?:[eE][-+]?\d+)?)\s+([-+]?[\d.]+(?:[eE][-+]?\d+)?)")
+
+
+def parse_wkt(text: str) -> dict:
+    """Parse a WKT / EWKT ``POLYGON`` or ``MULTIPOLYGON`` into a GeoJSON dict.
+
+    Accepts the CDSE OData ``Footprint`` form
+    ``geography'SRID=4326;MULTIPOLYGON (((lon lat, ...)), ...)'`` as well as
+    plain (E)WKT.  Only 2D coordinates are supported.
+    """
+    body = _WKT_PREFIX.sub("", text).strip().rstrip("'").strip()
+    match = re.match(r"^(MULTIPOLYGON|POLYGON)\s*(\(.*\))$", body, re.IGNORECASE | re.DOTALL)
+    if match is None:
+        raise ValueError(f"not a WKT POLYGON / MULTIPOLYGON: {text[:80]!r}")
+    kind, coords = match.group(1).upper(), match.group(2)
+    as_json = _WKT_PAIR.sub(r"[\1,\2]", coords).replace("(", "[").replace(")", "]")
+    try:
+        nested = json.loads(as_json)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"malformed WKT coordinates: {error}") from error
+    return {"type": "MultiPolygon" if kind == "MULTIPOLYGON" else "Polygon",
+            "coordinates": nested}
+
+
+def _loads_geometry(text: str):
+    """GeoJSON or WKT string -> Python object."""
+    stripped = text.lstrip()
+    if stripped[:1] in ("{", "["):
+        return json.loads(stripped)
+    return parse_wkt(stripped)
+
+
 def _as_point_array(ring: Sequence[Sequence[float]] | str | dict) -> np.ndarray:
     """Validate a polygon ring and return it as an (N, 2) (lon, lat) array."""
     if isinstance(ring, str):
         try:
-            ring = json.loads(ring)
+            ring = _loads_geometry(ring)
         except json.JSONDecodeError as error:
             raise ValueError(f"ring is not a valid GeoJSON Polygon string: {error}") from error
     if isinstance(ring, dict):
+        if ring.get("type") == "MultiPolygon":
+            raise ValueError(
+                "expected a Polygon, got a MultiPolygon: a WV footprint is handled by "
+                "s1_geometry.wv.estimate_wv_angles (or estimate_geometry(mode='WV'))")
         if ring.get("type") != "Polygon":
             raise ValueError(f"expected a GeoJSON Polygon, got type {ring.get('type')!r}")
         ring = ring["coordinates"][0]
@@ -92,7 +135,8 @@ def as_multipolygon(
 ) -> list[np.ndarray]:
     """Validate a MultiPolygon and return its (lon, lat) sub-polygon rings.
 
-    ``geom`` is a GeoJSON MultiPolygon *string* or *dict*, or a sequence of
+    ``geom`` is a GeoJSON MultiPolygon *string* or *dict*, a WKT / EWKT
+    ``MULTIPOLYGON`` string (e.g. the CDSE OData ``Footprint``), or a sequence of
     rings (each a sequence of (lon, lat) vertices).  Returns a list of
     ``(N_i, 2)`` (lon, lat) arrays, one per sub-polygon, in the given order.
 
@@ -102,7 +146,7 @@ def as_multipolygon(
     """
     if isinstance(geom, str):
         try:
-            geom = json.loads(geom)
+            geom = _loads_geometry(geom)
         except json.JSONDecodeError as error:
             raise ValueError(
                 f"not a valid GeoJSON MultiPolygon string: {error}") from error
@@ -131,6 +175,49 @@ def as_multipolygon(
             raise ValueError(f"sub-polygon {i} latitude out of range")
         rings.append(points)
     return rings
+
+
+def _on_antimeridian(ring: np.ndarray) -> np.ndarray:
+    return np.abs(np.abs(ring[:, 0]) - 180.0) < 1e-6
+
+
+def merge_antimeridian_splits(rings: list[np.ndarray]) -> list[np.ndarray]:
+    """Re-join the WV imagette rings split at the antimeridian.
+
+    The CDSE OData ``Footprint`` cuts an imagette crossing +/-180 deg into two
+    consecutive polygons (one on each side), so the product has one ring more
+    than imagettes and the WV1 / WV2 alternation is broken.  Two consecutive
+    rings that both touch the antimeridian on opposite sides, with
+    overlapping latitude ranges, are merged: the cut vertices (on +/-180 deg)
+    are dropped and the remaining corners (first piece's, then second
+    piece's, in their original order) are unwrapped next to the first piece's
+    longitude.  The merged ring may have longitudes beyond +/-180 deg,
+    which every computation of :mod:`s1_geometry.wv` (ECEF) handles.
+    """
+    out: list[np.ndarray] = []
+    i = 0
+    while i < len(rings):
+        a = rings[i]
+        if i + 1 < len(rings):
+            b = rings[i + 1]
+            on_a, on_b = _on_antimeridian(a), _on_antimeridian(b)
+            if (
+                on_a.any() and on_b.any()
+                and np.sign(a[on_a, 0][0]) != np.sign(b[on_b, 0][0])
+                and a[:, 1].min() <= b[:, 1].max() and b[:, 1].min() <= a[:, 1].max()
+            ):
+                side = np.sign(a[on_a, 0][0])  # the first piece is at side * 180
+                pts = np.vstack([a[~on_a], b[~on_b]])
+                pts[:, 0] = np.where(np.sign(pts[:, 0]) == side, pts[:, 0],
+                                     pts[:, 0] + side * 360.0)
+                _, first = np.unique(pts.round(9), axis=0, return_index=True)
+                pts = pts[np.sort(first)]
+                out.append(np.vstack([pts, pts[:1]]))
+                i += 2
+                continue
+        out.append(a)
+        i += 1
+    return out
 
 
 def _closed_ring_vertices(points: np.ndarray) -> list[tuple[float, float]]:
@@ -240,6 +327,12 @@ def orbit_direction_from_ring(
     len13 = float(lengths[1] + lengths[3])
     short_km = 0.5 * min(len02, len13)
     long_km = 0.5 * max(len02, len13)
+    if float(lengths.max()) < _MIN_SWATH_EDGE_KM:
+        raise ValueError(
+            f"footprint ring too small for a SAFE swath (longest edge "
+            f"{float(lengths.max()):.1f} km < {_MIN_SWATH_EDGE_KM:.0f} km, e.g. a WV "
+            "imagette): the orbit direction is not identifiable from it; use the "
+            "orbitDirection metadata, or the WV product footprint")
     if (
         _SM_BAND_LO_KM <= short_km <= _SM_BAND_HI_KM
         and long_km >= _SM_MIN_ASPECT_RATIO * short_km
@@ -345,7 +438,7 @@ def load_sar_polygons(
         iw = frame["Name"].str.fullmatch(r"S1[A-D]_IW_.*\.SAFE", na=False)
         names = frame["Name"].to_numpy()[iw]
         geos = frame["GeoFootprint"].to_numpy()[iw]
-        for name, geo in zip(names, geos):
+        for name, geo in zip(names, geos, strict=True):
             try:
                 points = _as_point_array(geo)
                 if tuple(points[-1]) != tuple(points[0]):
