@@ -131,81 +131,14 @@ CLI
    s1-geometry heading footprint.geojson --lat 36.59
    s1-geometry heading '{"type": "Polygon", "coordinates": [[...]]}' --lat 36.59 --json
    s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode IW
-   s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --json
+   s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode SM --beam S3 --json
+   s1-geometry wv "geography'SRID=4326;MULTIPOLYGON (((...)), ...)'" --lon -76.7 --lat -29.3
 
-The polygon argument is a GeoJSON file path or an inline JSON string: a
-GeoJSON Polygon object, a GeoJSON Feature, or a bare ring of [lon, lat]
-vertices; ``--json`` prints a machine-readable result.
+The polygon argument is a file path or an inline string: a GeoJSON Polygon
+or MultiPolygon object, a GeoJSON Feature, a bare ring of [lon, lat]
+vertices, or WKT (the CDSE OData ``Footprint``).  ``--json`` prints a
+machine-readable result; ``wv`` also accepts ``--r-s`` to force the satellite
+distance (km).
 
-The model
----------
-
-The heading of an IW acquisition depends almost only on the latitude and the
-orbit direction; the four satellites agree within a fraction of a degree, so
-two pooled degree-4 polynomials (ascending / descending) describe the whole
-constellation (fit window \|lat\| <= 70 deg; beyond it they extrapolate and the
-uncertainty model carries the extra error). The orbit direction is the
-*pass* (flight) direction derived from the footprint: the flight runs along
-the burst (along-track) edges of the 4-vertex SAFE parallelogram, the
-shorter opposite-edge family for IW. The rule is order-robust -- it handles
-both the standard CDSE ``GeoFootprint`` vertex order (counter-clockwise) and
-the clockwise ring copied from the CDSE product page, and reduces to the
-historical ``dlat = lat(v[1]) - lat(v[0])`` rule for the standard order.
-A northbound pass is ascending, a southbound pass descending; a product at
-the polar turnaround (**turning**, flight north component below 0.3 deg in
-magnitude) receives a near-due-west heading of 270 deg.
-
-Validation
-----------
-
-Against the measured OWI heading of the 11107 products used for the fit:
-mean \|error\| 0.749 deg, median 0.139 deg, p95 2.90 deg; 98.88 % of the
-headings fall within the returned U(lat) and 99.96 % within 2 U(lat). In the
-fitted window \|lat\| <= 70 deg the mean error is 0.14-0.25 deg per latitude
-band and the p95 stays below 1.19 deg.
-
-The angle model
----------------
-
-The radar is left-looking and steered to a quasi-constant **off-nadir angle**
-``sigma`` per sub-swath. Two consistent models are combined (verified against
-the ESA / SentiWiki documented angles to <= 0.07 deg):
-
-* **Constant slant range** -- the CDSE catalogue footprint. The across-track
-  ground width ``W`` of the ``GeoFootprint`` is a monotonic function of the
-  satellite geocentric distance ``R_s``; the catalogue polygon is computed
-  with the mean Earth radius (6371 km), so inverting ``W -> R_s`` (bisection)
-  calibrates the satellite altitude from the footprint alone (``R_s - 6371``
-  km) with no orbit file needed.
-* **Off-nadir** -- the actual radar steering. With the satellite distance
-  ``R_s``, the WGS84 geocentric radius ``R_e`` of the reference point and the
-  off-nadir angle ``sigma`` (the linear roll law between the documented
-  min / max-altitude values per sub-swath), the geocentric incidence is the
-  closed form ``theta_c = asin[(R_s/R_e) * sin(sigma)]``. The local
-  (ellipsoid-normal) incidence adds the deflection of the vertical (max
-  ~0.19 deg near \|lat\| = 45 deg).  The returned **elevation** is the
-  radar elevation angle of the ESA L2 OCN ``*ElevationAngle`` convention:
-  the angle at the satellite between nadir and the line of sight, i.e. the
-  off-nadir angle ``sigma`` (``incidence - gamma``), *not* ``90 deg -
-  incidence``.
-
-The across-track width ``W`` is the spherical distance (6371 km sphere)
-between the midpoints of the two range lines of the 4-vertex SAFE ring. In
-the standard CDSE vertex order (GRDH/GRDM/SLC/OCN) the range lines are the
-``v0-v1`` (far) and ``v2-v3`` (near) edges, for ascending and descending
-alike; rings with a rotated vertex order (e.g. ETA) fall back to the other
-edge pair when the standard width does not invert to a valid orbit altitude.
-The across-track position ``dfrac`` of the reference point (0 = near, 1 = far)
-selects ``sigma`` by a linear roll law between the near and far sub-swath
-edges.
-
-Angle validation
-----------------
-
-Validated on 66243 CDSE IW/EW rings: 98.9 % (IW) and 90.8 % (EW) of the
-products invert an orbit altitude in the documented 697.6 to 725.8 km band;
-the full chain (ring -> W -> R_s -> incidence) is simulated to <= 0.11 deg
-(IW) and <= 0.05 deg (EW) maximum error. The off-nadir model reproduces the
-documented per-sub-swath angles to <= 0.07 deg. Full-swath footprints are the
-supported case; a partial-swath EW footprint whose width does not invert to
-an orbit altitude in the documented band raises :class:`ValueError`.
+How the angles are computed, how the models were calibrated and how accurate
+they are is explained in :doc:`methodology` and :doc:`certification`.

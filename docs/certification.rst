@@ -1,184 +1,140 @@
-Certification against the ESA L2 OCN products
-==============================================
+Validation against ESA L2 OCN
+=============================
 
-This page documents the calibration of the angle estimators against the
-ESA Sentinel-1 L2 OCN products (the ``owi`` grids of the ``S1D_{IW,EW,WV}
-_OCN__2S`` products, which carry the per-pixel ``owiIncidenceAngle``,
-``owiElevationAngle`` and ``owiHeading`` fields).
+The library is checked against the ESA Sentinel-1 Level-2 OCN products,
+which carry, on their ``owi`` grid, the incidence angle
+(``owiIncidenceAngle``), the radar elevation angle (``owiElevationAngle``)
+and the ground heading (``owiHeading``) computed by ESA from the full orbit
+and attitude data.  s1-geometry is run on the same grid cells **from the
+catalogue footprint only** and the difference (model − ESA) is analysed.
+How the models work is explained in :doc:`methodology`.
 
-For each imaging mode two examples are shown — one **ascending** and one
-**descending** acquisition.  For every example the library chain is
-evaluated at every OCN grid cell and compared with the OCN fields:
+All the figures and tables of this page are produced by
+``scripts/make_figures.py`` (examples, IW / EW sample) and
+``scripts/validate_wv_ocn.py`` (WV); the per-example statistics are in
+``_static/certification/stats.json``.
 
-* **IW / EW**: the SAFE footprint ring is inverted to the orbit distance
-  ``r_s`` (swath width -> slant range), the off-nadir angle ``sigma`` is
-  interpolated linearly across the swath between the near and far range
-  lines, and the incidence angle is the ground angle
-  ``asin((r_s / r_e) sin sigma)`` plus the deflection of the vertical; the
-  radar elevation angle is the ESA OCN convention (off-nadir ``sigma``);
-  the ground heading is the latitude polynomial of :mod:`s1_geometry.heading`.
-* **WV**: the footprint is a MultiPolygon of burst rings; each OCN point is
-  mapped to its burst ring, and the angles are computed from the burst
-  geometry and the satellite distance taken from the OCN state vectors.
-* **SM (stripmap)**: no SM L2 products exist in the CDSE archive, so the SM
-  examples are **spec-based** (documented off-nadir bands per beam S1..S6,
-  SentiWiki / ESA User Handbook) and are **not validated against ESA L2
-  data**.  The SM ground swath is nearly altitude-invariant (~80 km for all
-  beams and altitudes), so the orbit distance is pinned to the mid-band
-  reference ``R_S_REF_SM_KM = 7082.7 km`` (intrinsic ~ +/-0.8 deg
-  incidence uncertainty).
+.. contents:: On this page
+   :local:
+   :depth: 1
 
-Each figure has one row per angle (incidence, radar elevation, ground
-heading) and, for the IW / EW / WV examples, four columns: the ESA L2 OCN
-data, the s1-geometry model, the error (model - data) and a model-vs-data
-scatter plot with the number of points, the RMSE, the bias and the maximum
-absolute error.
+.. include:: _generated/example_products.inc
+
+
+Examples
+--------
+
+One ascending and one descending product per mode.  For IW and EW, each row
+shows the ESA field, the error map and the error distribution; for WV, the
+mean of each imagette (ESA: circles, model: lines) and the error
+distribution over all the cells.
 
 IW
---
+^^
 
-Ascending: ``S1D_IW_OCN__2SDV_20260110T042252_20260110T042321_000967_00084E_2B57.SAFE``
-(2026-01-10, ~23.5 N, r_s = 7068.9 km).
+Ascending: |iw_asc_product|
 
-.. image:: _static/certification/iw_asc.png
-   :align: center
+.. image:: _static/figures/example_iw_asc.png
+   :class: only-light
    :width: 100%
-
-Descending: ``S1D_IW_OCN__2SDV_20260110T063235_20260110T063257_000968_000858_DB63.SAFE``
-(2026-01-10, ~44.9 N, r_s = 7072.9 km).
-
-.. image:: _static/certification/iw_desc.png
    :align: center
+   :alt: IW ascending example: ESA fields, error maps and error distributions
+
+.. image:: _static/figures/example_iw_asc_dark.png
+   :class: only-dark
    :width: 100%
+   :align: center
+   :alt: IW ascending example: ESA fields, error maps and error distributions
+
+Descending: |iw_desc_product|
+
+.. image:: _static/figures/example_iw_desc.png
+   :class: only-light
+   :width: 100%
+   :align: center
+   :alt: IW descending example: ESA fields, error maps and error distributions
+
+.. image:: _static/figures/example_iw_desc_dark.png
+   :class: only-dark
+   :width: 100%
+   :align: center
+   :alt: IW descending example: ESA fields, error maps and error distributions
 
 EW
---
+^^
 
-Ascending: ``S1D_EW_OCN__2SDV_20261106T191651_20261106T191758_005351_00A31E_D0E6.SAFE``
-(2026-11-06, ~43.2 N, r_s = 7072.6 km).
+Ascending: |ew_asc_product|
 
-.. image:: _static/certification/ew_asc.png
-   :align: center
+.. image:: _static/figures/example_ew_asc.png
+   :class: only-light
    :width: 100%
-
-Descending: ``S1D_EW_OCN__2SDV_20260416T081150_20260416T081250_002369_003DD0_9AF8.SAFE``
-(2026-04-16, ~41.8 N, r_s = 7072.9 km).
-
-.. image:: _static/certification/ew_desc.png
    :align: center
-   :width: 100%
+   :alt: EW ascending example: ESA fields, error maps and error distributions
 
-The EW model carries a systematic bias of about -1.1 deg on the incidence
-angle: the across-track sigma is interpolated linearly between the near and
-far range lines while the five EW subswaths (EW1..EW5) are acquired with
-five discrete beams.  The per-subswath RMSE is 0.8-1.9 deg; the bias is a
-model-behaviour, not a bug.
+.. image:: _static/figures/example_ew_asc_dark.png
+   :class: only-dark
+   :width: 100%
+   :align: center
+   :alt: EW ascending example: ESA fields, error maps and error distributions
+
+Descending: |ew_desc_product|
+
+.. image:: _static/figures/example_ew_desc.png
+   :class: only-light
+   :width: 100%
+   :align: center
+   :alt: EW descending example: ESA fields, error maps and error distributions
+
+.. image:: _static/figures/example_ew_desc_dark.png
+   :class: only-dark
+   :width: 100%
+   :align: center
+   :alt: EW descending example: ESA fields, error maps and error distributions
+
+The IW / EW error grows towards the edges of the swath and of each
+sub-swath: the off-nadir angle is interpolated as a straight line from the
+near to the far range line, whereas IW and EW are made of 3 and 5 sub-swaths,
+each with its own beam.  EW, twice as wide, carries the larger error.
 
 WV
---
+^^
 
-Ascending: ``S1D_WV_OCN__2SSV_20260828T233712_20260828T234055_004332_007FE6_03DE.SAFE``
-(2026-08-28, mean lat ~22.5 S, 16 bursts, r_s from the OCN state vectors).
+Ascending: |wv_asc_product|
 
-.. image:: _static/certification/wv_asc.png
-   :align: center
+.. image:: _static/figures/example_wv_asc.png
+   :class: only-light
    :width: 100%
-
-Descending: ``S1D_WV_OCN__2SSV_20260826T015607_20260826T020019_004290_007E63_62F7.SAFE``
-(2026-08-26, mean lat ~33.2 S, 18 bursts, r_s from the OCN state vectors).
-
-.. image:: _static/certification/wv_desc.png
    :align: center
+   :alt: WV ascending example: imagette means and error distributions
+
+.. image:: _static/figures/example_wv_asc_dark.png
+   :class: only-dark
    :width: 100%
-
-SM (stripmap)
--------------
-
-No SM L2 products exist in the CDSE archive (v1 and v2, 2014-2026), so the
-SM examples are **spec-based**: a synthetic SM S3 SAFE ring (300 km burst,
-40 N) is built from the documented off-nadir band of the S3 beam and the
-constant-slant-range model, and the model angles are shown over the ring
-with the across-track profiles against the documented spec bands.  These
-examples are **not validated against ESA L2 data**.
-
-Ascending:
-
-.. image:: _static/certification/sm_asc.png
    :align: center
-   :width: 80%
+   :alt: WV ascending example: imagette means and error distributions
 
-Descending:
+Descending: |wv_desc_product|
 
-.. image:: _static/certification/sm_desc.png
+.. image:: _static/figures/example_wv_desc.png
+   :class: only-light
+   :width: 100%
    :align: center
-   :width: 80%
+   :alt: WV descending example: imagette means and error distributions
 
-Summary of the statistics
--------------------------
+.. image:: _static/figures/example_wv_desc_dark.png
+   :class: only-dark
+   :width: 100%
+   :align: center
+   :alt: WV descending example: imagette means and error distributions
 
-The per-example statistics (n, RMSE, bias, and the maximum absolute
-error, in degrees, model minus data) are written to
-``docs/_static/certification/stats.json`` by the figure generation script.
+Statistics of the examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-IW
-^^^
+.. include:: _generated/example_stats.inc
 
-+-----------+-----------+----------+---------+---------+----------+
-| orbit     | angle     | n        | RMSE    | bias    | max|err| |
-+===========+===========+==========+=========+=========+==========+
-| ascending | incidence | 49,949   | 0.466   | -0.400  | 0.802    |
-+-----------+-----------+----------+---------+---------+----------+
-| ascending | elevation | 49,949   | 0.482   | -0.436  | 0.785    |
-+-----------+-----------+----------+---------+---------+----------+
-| ascending | heading   | 49,949   | 0.302   | -0.112  | 0.683    |
-+-----------+-----------+----------+---------+---------+----------+
-| descending| incidence | 36,830   | 0.482   | -0.365  | 0.982    |
-+-----------+-----------+----------+---------+---------+----------+
-| descending| elevation | 36,830   | 0.559   | -0.490  | 1.019    |
-+-----------+-----------+----------+---------+---------+----------+
-| descending| heading   | 36,830   | 0.665   | -0.146  | 1.399    |
-+-----------+-----------+----------+---------+---------+----------+
 
-EW
-^^^
-
-+-----------+-----------+-----------+---------+---------+----------+
-| orbit     | angle     | n         | RMSE    | bias    | max|err| |
-+===========+===========+===========+=========+=========+==========+
-| ascending | incidence | 188,580   | 1.375   | -0.988  | 2.916    |
-+-----------+-----------+-----------+---------+---------+----------+
-| ascending | elevation | 188,580   | 1.319   | -1.025  | 2.711    |
-+-----------+-----------+-----------+---------+---------+----------+
-| ascending | heading   | 188,580   | 1.297   | +0.790  | 3.015    |
-+-----------+-----------+-----------+---------+---------+----------+
-| descending| incidence | 168,821   | 1.430   | -1.129  | 2.859    |
-+-----------+-----------+-----------+---------+---------+----------+
-| descending| elevation | 168,821   | 1.377   | -1.146  | 2.661    |
-+-----------+-----------+-----------+---------+---------+----------+
-| descending| heading   | 168,821   | 1.221   | -0.736  | 2.818    |
-+-----------+-----------+-----------+---------+---------+----------+
-
-WV
-^^^
-
-+-----------+-----------+--------+---------+---------+----------+
-| orbit     | angle     | n      | RMSE    | bias    | max|err| |
-+===========+===========+========+=========+=========+==========+
-| ascending | incidence | 6,400  | 0.287   | -0.269  | 0.443    |
-+-----------+-----------+--------+---------+---------+----------+
-| ascending | elevation | 6,400  | 0.269   | -0.252  | 0.415    |
-+-----------+-----------+--------+---------+---------+----------+
-| ascending | heading   | 6,400  | 0.090   | +0.089  | 0.107    |
-+-----------+-----------+--------+---------+---------+----------+
-| descending| incidence | 7,200  | 0.192   | -0.154  | 0.342    |
-+-----------+-----------+--------+---------+---------+----------+
-| descending| elevation | 7,200  | 0.175   | -0.137  | 0.312    |
-+-----------+-----------+--------+---------+---------+----------+
-| descending| heading   | 7,200  | 0.091   | -0.089  | 0.111    |
-+-----------+-----------+--------+---------+---------+----------+
-
-Sentinel-1A / -1C / -1D statistical validation (metadata only)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+WV: Sentinel-1A, -1C and -1D
+----------------------------
 
 ``scripts/validate_wv_ocn.py`` runs the metadata-only chain -- the product
 footprint (the ``manifest.safe`` imagette rings, identical to the CDSE OData
@@ -187,40 +143,65 @@ footprint (the ``manifest.safe`` imagette rings, identical to the CDSE OData
 imagette centre for the products before mid-2020, whose WV ``owi`` grid is
 empty).  Sample: one day per month (three products per day spread over the
 day) for S1C (2025-2026) and S1D (2026), S1A 2025-2026 plus one day per year
-2015-2024; 164 products, latitudes -80 to +52 deg, up to 143 imagettes,
+2015-2024; 164 products, latitudes -80 to +52°, up to 143 imagettes,
 2,974,963 cells.  Per product statistics:
 ``_static/certification/wv_validation_s1acd.csv``.
 
 Look-angle law recalibration.  The first law (a linear latitude term fitted
 on 64 mostly southern-hemisphere products) had an incidence bias growing in
-the northern hemisphere (+0.6 deg at 30 N, +0.9 deg at 45-50 N).  The latitude
-term is now a degree-5 polynomial, fitted by
+the northern hemisphere (+0.6° at 30 N, +0.9° at 45-50 N).  The latitude
+term is now a°ree-5 polynomial, fitted by
 ``scripts/calibrate_wv_look_angle.py`` (one Newton step per imagette on the
 incidence error) on 62,588 imagettes of 1,205 S1C / S1D products of *other*
-days than the validation sample (latitudes -79.5 to +86 deg); S1A is not used
+days than the validation sample (latitudes -79.5 to +86°); S1A is not used
 in the fit.
 
-+-----------+-----------+--------------+-------------+--------------+------------+
-| satellite | products  | incidence    | elevation   | heading      | inc. max   |
-|           |           | RMSE (deg)   | RMSE (deg)  | RMSE (deg)   | abs. error |
-+===========+===========+==============+=============+==============+============+
-| S1A       | 75        | 0.021        | 0.033       | 0.097        | 0.159      |
-+-----------+-----------+--------------+-------------+--------------+------------+
-| S1C       | 57        | 0.019        | 0.032       | 0.096        | 0.163      |
-+-----------+-----------+--------------+-------------+--------------+------------+
-| S1D       | 32        | 0.069        | 0.065       | 0.123        | 0.475      |
-+-----------+-----------+--------------+-------------+--------------+------------+
-| all       | 164       | 0.036        | 0.041       | 0.103        | 0.475      |
-+-----------+-----------+--------------+-------------+--------------+------------+
-| first law | 163       | 0.233        | 0.224       | 0.098        | 1.634      |
-+-----------+-----------+--------------+-------------+--------------+------------+
+.. list-table::
+   :header-rows: 1
+
+   * - satellite
+     - products
+     - incidence RMSE
+     - elevation RMSE
+     - heading RMSE
+     - incidence max error
+   * - S1A
+     - 75
+     - 0.021°
+     - 0.033°
+     - 0.097°
+     - 0.159°
+   * - S1C
+     - 57
+     - 0.019°
+     - 0.032°
+     - 0.096°
+     - 0.163°
+   * - S1D
+     - 32
+     - 0.069°
+     - 0.065°
+     - 0.123°
+     - 0.475°
+   * - all
+     - 164
+     - 0.036°
+     - 0.041°
+     - 0.103°
+     - 0.475°
+   * - first law
+     - 163
+     - 0.233°
+     - 0.224°
+     - 0.098°
+     - 1.634°
 
 Subswath (WV1 / WV2) labels are 100 % correct and no cell falls outside the
-footprint.  The incidence bias is below 0.08 deg in every latitude band.  The
-heading p95 error of the worst product is 0.36 deg (S1D products through the
-polar turn), hence the WV heading uncertainty of 0.4 deg.  Long products need
+footprint.  The incidence bias is below 0.08° in every latitude band.  The
+heading p95 error of the worst product is 0.36° (S1D products through the
+polar turn), hence the WV heading uncertainty of 0.4°.  Long products need
 the sliding-window track fit (``window="auto"``): with a single track geometry
-their heading RMSE is 0.36 instead of 0.09 deg.
+their heading RMSE is 0.36 instead of 0.09°.
 
 Excluded from the statistics:
 
@@ -228,33 +209,68 @@ Excluded from the statistics:
   yet the reference one);
 * end-of-datatake products with 2 imagettes (at least 4 are needed);
 * reference headings known to be wrong: ``owiHeading`` of the IPF 003.31
-  products (2021: 357 deg on a descending pass), imagettes whose
-  ``owiHeading`` is constant at 90.0004 deg (an ESA default value, seen near
+  products (2021: 357° on a descending pass), imagettes whose
+  ``owiHeading`` is constant at 90.0004° (an ESA default value, seen near
   the antimeridian), and ``oswHeading`` (before mid-2020; a different
-  quantity, 1-6 deg away from the ground-track heading).
+  quantity, 1-6° away from the ground-track heading).
 
 The centre of an imagette ring is the mean of its *closed* ring vertices (the
 first vertex counted twice), the convention of the CDSE footprints the
 look-angle law is calibrated with.
 
+.. image:: _static/figures/validation_wv_latitude.png
+   :class: only-light
+   :width: 100%
+   :align: center
+   :alt: WV incidence bias and heading RMSE per product against latitude
+
+.. image:: _static/figures/validation_wv_latitude_dark.png
+   :class: only-dark
+   :width: 100%
+   :align: center
+   :alt: WV incidence bias and heading RMSE per product against latitude
+
+
+IW and EW: sample of 2026 products
+----------------------------------
+
+Two Sentinel-1D products every fourth day of 2026 for IW and for EW (every
+fourth grid cell).  Products whose footprint-derived pass direction differs
+from the catalogue ``orbitDirection``, or whose ESA grid is not covered by
+the model (partial-swath footprints), are left out; the per-product values
+are in ``_static/certification/iw_ew_validation_2026.csv``.
+
+Kept: 41 of 46 IW and 19 of 29 EW products.  Median per-product RMSE below
+60° of latitude: IW incidence 0.54°, heading 0.50°; EW incidence 1.44°,
+heading 0.50°.  Beyond 60°: IW 2.5° / 2.5°, EW 2.1° / 5.5° (heading
+polynomials extrapolated, polar turn).  Left out: 5 IW products (72-77° S)
+and 8 EW products (mostly beyond 60° N) whose footprint-derived pass
+direction is wrong, and 2 EW products only partly covered.
+
+.. image:: _static/figures/validation_iw_ew_latitude.png
+   :class: only-light
+   :width: 100%
+   :align: center
+   :alt: IW and EW incidence bias and heading RMSE per product against latitude
+
+.. image:: _static/figures/validation_iw_ew_latitude_dark.png
+   :class: only-dark
+   :width: 100%
+   :align: center
+   :alt: IW and EW incidence bias and heading RMSE per product against latitude
+
+
 Orbit model stability
-^^^^^^^^^^^^^^^^^^^^^
+---------------------
 
-All Sentinel-1 units fly the same reference orbit, only phased differently,
-so ``r_s(lat, pass)`` does not depend on the unit or on its slot.  Checked
-on POEORB files from 2025-01 to 2026-10 (S1A, S1C, S1D monthly, S1C every 3
-days from April to July 2026 around its move to the former S1A slot;
-``_static/certification/orbit_r_s_drift_2025_2026.csv``): bias within
-0.03 km and residual std 0.10-0.11 km on every day, except the S1C
-commissioning (2025-03-15, -1.9 km) and 2026-06-21 (+1.9 km), during the S1C
-relocation when S1C acquired nothing (no product from 2026-06-09 to
-2026-06-23).  1 km of ``r_s`` error is ~0.06 deg of incidence.
 
-SM
-^^^
 
-Spec-based only (no SM L2 products in the CDSE archive): the across-track
-profiles of the synthetic S3 examples reproduce the documented off-nadir
-bands of the S3 beam (24.67-29.45 deg at the reference altitude) and the
-incidence range (28.7-34.2 deg at 40 N).  Not validated against ESA L2
-data.
+The figure is on the :doc:`methodology` page.
+
+
+SM (stripmap)
+-------------
+
+No SM Level-2 product exists in the CDSE archive (2014-2026), so the SM
+chain is **specification-based and not validated** against ESA data (see
+:doc:`methodology`).

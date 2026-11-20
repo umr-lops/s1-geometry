@@ -1,61 +1,51 @@
 s1-geometry
 ===========
 
-Library to estimate geometric quantities (ground heading, incidence and
-radar elevation angles) from a Sentinel-1 SAR footprint (the SAFE polygon,
-e.g. the CDSE ``GeoFootprint`` column).
+Incidence angle, radar elevation angle and ground heading of a Sentinel-1
+SAR acquisition, computed **from the catalogue metadata only**: the
+footprint polygon of the CDSE catalogue (OData ``Footprint`` /
+``GeoFootprint``) and a reference point.  No SAR data, no orbit file.
 
-The library provides:
-
-* the **IW / EW / SM incidence and elevation angles** of an acquisition at a
-  reference point (the SM beams S1..S6 are supported, spec-based, not
-  validated against ESA L2 data);
-* the **WV (Wave mode) per-point angles** -- incidence, elevation and
-  heading -- from the product footprint (a MultiPolygon of imagette rings)
-  alone: the satellite distance comes from a metadata-only orbit model, so the
-  CDSE OData metadata (``Footprint``) is enough, no orbit file or SAR data;
-* the **IW ground heading** as a function of the reference point and the SAFE
-  footprint polygon, together with a latitude-dependent uncertainty.
+* **IW / EW / SM**: incidence and elevation at a reference point from the
+  4-corner footprint, and the IW ground heading model with a
+  latitude-dependent uncertainty (SM is specification-based, not validated);
+* **WV (Wave mode)**: incidence, elevation and heading at any point of the
+  product, from the imagette footprints and a metadata-only orbit model --
+  0.04° incidence RMSE against 164 ESA L2 OCN products of S1A, S1C and S1D.
 
 ::
 
-   from s1_geometry import estimate_geometry, estimate_incidence_elevation
+   from s1_geometry import estimate_geometry
 
-   geometry = estimate_geometry(footprint_polygon, ref_lat=36.592652)
-   print(geometry.heading_deg, geometry.heading_uncertainty_deg)
-
-   angles = estimate_incidence_elevation(footprint_polygon, 10.5, 36.59, "IW")
-   print(angles.incidence_deg, angles.elevation_deg)
+   iw = estimate_geometry(footprint, ref_lon=10.5, ref_lat=36.59, mode="IW")
+   wv = estimate_geometry(odata_footprint, ref_lon=-76.7, ref_lat=-29.3, mode="WV")
+   print(wv.incidence_deg, wv.elevation_deg, wv.heading_deg)
 
 .. code-block:: bash
 
-   s1-geometry heading footprint.geojson --lat 36.59
+   pip install s1-geometry
    s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode IW
-   s1-geometry angles footprint.geojson --lon 10.5 --lat 36.59 --mode SM --beam S3
    s1-geometry wv "<OData Footprint WKT>" --lon -76.7 --lat -29.3
 
-The heading model is a per-orbit-direction degree-4 polynomial in latitude,
-fitted on 11107 IW OCN products; 98.88 % of the measured headings fall within
-the returned uncertainty. See :doc:`usage` and :doc:`certification` for the
-validation against the ESA L2 OCN products.
-
-Test suite: ``python -m pytest -q``.
-
-.. image:: _static/figures/iw_example.png
-   :align: center
+.. image:: _static/figures/method_geometry.png
+   :class: only-light
    :width: 100%
-   :alt: IW example — ESA L2 OCN (owi) values, s1-geometry estimates, error
-        and model-vs-data scatter
+   :alt: Viewing geometry: satellite, nadir, imaged point and the angles
 
-One IW example: the ESA L2 OCN (``owi``) angle fields, the s1-geometry
-estimates and the error, one row per angle.  See :doc:`figures` for one
-example per mode (IW, EW, WV, SM) and the error vs latitude for the
-centre and corners of the SAR image.
+.. image:: _static/figures/method_geometry_dark.png
+   :class: only-dark
+   :width: 100%
+   :alt: Viewing geometry: satellite, nadir, imaged point and the angles
+
+Start with :doc:`methodology` (what goes in, how it works, how it was
+calibrated), then :doc:`usage`; :doc:`certification` gives the comparison
+with the ESA products.  Cite the software with its Zenodo DOI (see the
+README).
 
 .. toctree::
    :maxdepth: 2
 
+   methodology
    usage
-   figures
    certification
    api/s1_geometry
