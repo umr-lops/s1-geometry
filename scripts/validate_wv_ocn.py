@@ -45,19 +45,36 @@ def read_owi(safe: Path) -> dict[str, np.ndarray]:
     """Concatenated owi cells of all the imagettes of a product."""
     import netCDF4
 
-    out: dict[str, list] = {k: [] for k in ("lon", "lat", "inc", "el", "hd", "sw")}
+    out: dict = {k: [] for k in ("lon", "lat", "inc", "el", "hd", "sw")}
     for path in sorted((safe / "measurement").glob("*.nc")):
         sw = 1 if "-wv1-" in path.name else 2
         with netCDF4.Dataset(path) as ds:
             ds.set_auto_mask(True)
-            arrays = [np.ma.filled(ds[v][:].astype(float), np.nan).ravel() for v in (
-                "owiLon", "owiLat", "owiIncidenceAngle", "owiElevationAngle", "owiHeading")]
+            names = ("owiLon", "owiLat", "owiIncidenceAngle", "owiElevationAngle", "owiHeading")
+            if np.ma.count(ds["owiLon"][:]) == 0:
+                # older IPF versions (before ~2020) have an empty WV owi grid:
+                # use the osw imagette-centre point (no elevation angle)
+                names = ("oswLon", "oswLat", "oswIncidenceAngle", "-", "oswHeading")
+            size = ds[names[0]][:].size
+            # owiElevationAngle is missing in the older (pre-2025) IPF versions
+            arrays = [np.ma.filled(ds[v][:].astype(float), np.nan).ravel()
+                      if v in ds.variables else np.full(size, np.nan) for v in names]
+        hd = arrays[4]
+        valid = hd[np.isfinite(hd)]
+        if valid.size > 1 and np.ptp(valid) == 0.0 and abs(valid[0] - 90.0) < 0.01:
+            # ESA OCN default value: owiHeading is exactly 90 deg on every cell of
+            # some imagettes (seen near the antimeridian); not a heading
+            arrays[4] = np.full(hd.size, np.nan)
+            out["n_heading_default"] = out.get("n_heading_default", 0) + 1
         for key, arr in zip(("lon", "lat", "inc", "el", "hd"), arrays, strict=True):
             out[key].append(arr)
         out["sw"].append(np.full(arrays[0].size, sw))
+    n_default = out.pop("n_heading_default", 0)
     data = {k: np.concatenate(v) for k, v in out.items()}
     ok = np.isfinite(data["lon"]) & np.isfinite(data["lat"]) & np.isfinite(data["inc"])
-    return {k: v[ok] for k, v in data.items()}
+    data = {k: v[ok] for k, v in data.items()}
+    data["n_heading_default"] = n_default
+    return data
 
 
 def _stats(err: np.ndarray) -> tuple[float, float, float]:
@@ -87,6 +104,7 @@ def validate(safe: Path, window) -> dict:
         "n": int(np.isfinite(res.incidence_deg).sum()),
         "n_outside": int(np.isnan(res.incidence_deg).sum()),
         "subswath_agree": float(np.mean(res.subswath == owi["sw"])),
+        "n_imagettes_heading_default": owi["n_heading_default"],
     }
     errors = {
         "inc": res.incidence_deg - owi["inc"],
@@ -95,7 +113,8 @@ def validate(safe: Path, window) -> dict:
     }
     for key, err in errors.items():
         row[f"{key}_rmse"], row[f"{key}_bias"], row[f"{key}_max"] = _stats(err)
-        row[f"{key}_p95"] = float(np.nanpercentile(np.abs(err), 95))
+        row[f"{key}_p95"] = (float(np.nanpercentile(np.abs(err), 95))
+                             if np.isfinite(err).any() else np.nan)
         for sw in (1, 2):
             row[f"{key}_bias_wv{sw}"] = _stats(err[owi["sw"] == sw])[1]
     return row
@@ -130,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     for safe in _expand(args.paths, args.sample):
         try:
             rows.append(validate(safe, window))
-        except (ValueError, OSError, KeyError) as error:
+        except (ValueError, OSError, KeyError, IndexError) as error:
             print(f"SKIP {safe.name}: {error}", file=sys.stderr)
             continue
         r = rows[-1]

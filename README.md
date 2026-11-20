@@ -245,14 +245,18 @@ POEORB state vectors (S1A 2026-06-29, S1C 2025-12-10, S1D 2026-05-11 and
 2026-10-29; `scripts/calibrate_orbit_radius.py`, public `s1-orbits` bucket):
 residual std 0.10 km, max 0.29 km at the WV1 / WV2 target latitudes, bias
 per satellite below 0.04 km (~0.02 deg of incidence). The WV angle chain is
-validated, from the footprint metadata only, against the ESA L2 OCN `owi`
-grid of **63 Sentinel-1C products** (2025-01 to 2026-11, latitudes -74 to
-+52 deg, up to 118 imagettes / 29 min, 1.43 million cells): **RMSE incidence
-0.24 deg, elevation 0.23 deg, heading 0.09 deg** (max 0.26 deg), subswath
-labels 100 % correct (`scripts/validate_wv_ocn.py`). The heading uncertainty
-returned for WV is 0.25 deg (p95 of the worst product). Long products need the
-sliding-window track fit (`window="auto"`, default). Not covered: products
-with fewer than 4 imagettes, the commissioning phase of a satellite.
+validated, from the footprint metadata only, against the ESA L2 OCN grid of
+**164 products of Sentinel-1A (2015-2026, not used in the calibration), -1C
+and -1D** (latitudes -80 to +52 deg, up to 143 imagettes, 2.97 million
+cells): **RMSE incidence 0.036 deg, elevation 0.041 deg, heading 0.10 deg**
+(S1A alone: 0.021 / 0.033 / 0.10 deg), subswath labels 100 % correct
+(`scripts/validate_wv_ocn.py`). The look-angle law latitude term is fitted
+on 62588 imagettes of other S1C / S1D days (`scripts/calibrate_wv_look_angle.py`).
+The heading uncertainty returned for WV is 0.4 deg (p95 of the worst product,
+through the polar turn). Long products need the sliding-window track fit
+(`window="auto"`, default). The orbit model is unit- and slot-independent
+(checked across the 2026 S1C relocation). Not covered: products with fewer
+than 4 imagettes, the commissioning phase of a satellite.
 
 ## Roadmap
 
@@ -260,10 +264,9 @@ with fewer than 4 imagettes, the commissioning phase of a satellite.
 - [x] Incidence angle estimator `sar_incidence_angle` (IW + EW, SM spec-based)
 - [x] Elevation angle estimator `sar_elevation_angle` (IW + EW, SM spec-based)
 - [x] WV incidence / elevation / heading from the OData metadata only
-- [x] WV validation on S1C (63 products, long products, -74 to +52 deg)
-- [x] WV heading uncertainty (0.25 deg)
-- [ ] WV validation on S1A (and more S1D)
-- [ ] WV products with fewer than 4 imagettes (end of datatake)
+- [x] WV validation on S1A / S1C / S1D (164 products, -80 to +52 deg)
+- [x] WV look-angle law recalibrated (northern-hemisphere bias removed)
+- [x] WV heading uncertainty (0.4 deg)
 
 ## Development
 

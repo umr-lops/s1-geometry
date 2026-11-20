@@ -106,9 +106,9 @@ imagettes.  The rings must be **in time order** (the order of the CDSE
 of the ``WVImagettes`` list); a re-ordered geometry (e.g. the ``geometry``
 column of the daily Parquets, normalised by a GIS library) is detected and
 rejected.  Imagettes split in two at the antimeridian in the OData
-``Footprint`` are re-joined.  Validated on 63 Sentinel-1C products (1.43
-million ESA L2 OCN cells): RMSE 0.24 / 0.23 / 0.09 deg for the incidence /
-elevation / heading (see :doc:`certification`).  Points outside every imagette
+``Footprint`` are re-joined.  Validated on 164 Sentinel-1A / -1C / -1D products
+(2.97 million ESA L2 OCN cells): RMSE 0.036 / 0.041 / 0.10 deg for the
+incidence / elevation / heading (see :doc:`certification`).  Points outside every imagette
 raise ``ValueError`` (or give NaN with ``on_outside="nan"``).
 
 The orbit model reproduces the POEORB state vectors of Sentinel-1A, -1C and

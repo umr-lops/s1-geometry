@@ -289,10 +289,9 @@ def test_estimate_wv_angles_window_matches_full_fit_on_great_circle():
     lons, lats = _centres(rings)
     full = estimate_wv_angles(rings, 7077.0, lons, lats)
     win = estimate_wv_angles(rings, 7077.0, lons, lats, window=4)
-    # the track geometry is the same; the incidence only differs through the
-    # latitude term of the look-angle law (window mean latitude instead of the
-    # product mean latitude, the synthetic product spans ~40 deg of latitude)
-    np.testing.assert_allclose(win.incidence_deg, full.incidence_deg, atol=0.3)
+    # same track geometry, and the look-angle law uses each imagette's own
+    # latitude in both cases
+    np.testing.assert_allclose(win.incidence_deg, full.incidence_deg, atol=0.02)
     assert np.abs(_daz(win.heading_deg, full.heading_deg)).max() < 0.1
     assert np.array_equal(win.subswath, subswaths)
     with pytest.raises(ValueError, match="window"):

@@ -39,10 +39,11 @@ alone.  The angles are returned **per ground point**.  The model:
 
 Validated point-by-point against the ESA L2 OCN ``owi`` grid (incidence,
 elevation, heading), from the footprint metadata only (``r_s`` from the
-orbit model): 63 Sentinel-1C products (2025-01 to 2026-11, latitudes -74 to
-+52 deg, up to 118 imagettes / 29 min), 1.43 million cells: RMSE 0.24 deg
-(incidence), 0.23 deg (elevation), 0.09 deg (heading), subswath labels 100 %
-correct; and two Sentinel-1D products.  See :doc:`/certification`.
+orbit model): 164 products of Sentinel-1A (2015-2026, independent of the
+calibration), -1C and -1D (2025-2026), latitudes -80 to +52 deg, up to 143
+imagettes, 2.97 million cells: RMSE 0.036 deg (incidence), 0.041 deg
+(elevation), 0.10 deg (heading); Sentinel-1A alone 0.021 / 0.033 / 0.10 deg;
+subswath labels 100 % correct.  See :doc:`/certification`.
 
 Limits: a product needs at least 4 imagettes (end-of-datatake products with
 2 imagettes are rejected); the rings must be in time order; the orbit model
@@ -90,35 +91,50 @@ WV_AUTO_WINDOW_MIN_RINGS = 40
 WV_AUTO_WINDOW = 10
 
 #: WV heading uncertainty (deg): the 95th percentile of the heading error of
-#: the worst product of the S1C validation (0.234 deg), rounded up.
-WV_HEADING_UNCERTAINTY_DEG = 0.25
+#: the worst product of the S1A / S1C / S1D validation (0.361 deg, a product
+#: through the polar turn), rounded up.
+WV_HEADING_UNCERTAINTY_DEG = 0.4
 
-#: Calibrated latitude term ``(deg/deg, deg)`` of the look-angle law, fitted on
-#: 64 WV OCN products (2026-01..06); residual std 0.086 deg (WV1) / 0.065 deg
-#: (WV2).  Do not change without refitting and revalidating.
-_WV_THETA_LAT = {1: (0.012076, 0.2450), 2: (0.009995, 0.6560)}
+#: Calibrated latitude term of the look-angle law: polynomial coefficients (low
+#: to high degree, deg) in ``x = lat / 90``, per subswath.  Fitted by
+#: ``scripts/calibrate_wv_look_angle.py`` on 62588 imagettes of 1205 S1C / S1D
+#: WV OCN products (S1C 2025-03..2026-11, S1D 2026; lat -79.5..86 deg) with
+#: ``r_s`` from the orbit model; residual std 0.041 deg (WV1) / 0.030 deg (WV2),
+#: no pass-direction dependence.  The quadratic part mostly carries the WGS84
+#: ellipsoid (see :func:`wv_theta_deg`).  Do not change without refitting and
+#: revalidating.
+_WV_THETA_LAT = {
+    1: (0.423368, 0.061652, -3.279252, 0.080042, 2.248127, -0.414968),
+    2: (0.897869, -0.022367, -3.338828, 0.050918, 2.170639, -0.297533),
+}
+
+#: Latitude range (deg) of the look-angle calibration; latitudes beyond are
+#: clamped.
+_WV_THETA_LAT_RANGE = (-79.5, 86.0)
 
 
 def wv_theta_deg(subswath: int, r_s_km: float, lat_deg: float) -> float:
     """WV look (off-nadir) angle (deg) for subswath ``subswath`` (1 or 2).
 
     The documented band-center at the reference altitude (711.7 km), linear in
-    the satellite geocentric distance ``r_s_km``, plus a calibrated latitude
-    term.  ``r_s_km`` is the satellite geocentric distance (km).
+    the satellite geocentric distance ``r_s_km``, plus a calibrated
+    latitude polynomial (degree 5 in ``lat / 90``).  ``r_s_km`` is the
+    satellite geocentric distance (km) and ``lat_deg`` the latitude of the
+    imagette (clamped to the calibration range -79.5 to 86 deg).
 
     Convention: the law uses ``r_s_km - R_E_KM`` (6371 km sphere) as the
     "altitude", whereas the documented band (697.6 to 725.8 km) is the height
     above the WGS84 ellipsoid; the two differ by up to ~14 km at high
-    latitude.  The calibrated latitude term was fitted with this convention,
-    so keep it unchanged unless the law is refitted.
+    latitude.  The calibrated latitude polynomial absorbs the difference
+    (with the other model approximations), so keep both together.
     """
     if subswath not in WV_THETA_DOC:
         raise ValueError(f"unknown WV subswath {subswath!r} (expected 1 or 2)")
     c_min, c_max = WV_THETA_DOC[subswath]
     slope = (c_max - c_min) / (_ALT_MAX - _ALT_MIN)
     base = 0.5 * (c_min + c_max) + slope * (float(r_s_km) - R_E_KM - _REF_ALT)
-    m, b = _WV_THETA_LAT[subswath]
-    return base + m * float(lat_deg) + b
+    x = float(np.clip(float(lat_deg), *_WV_THETA_LAT_RANGE)) / 90.0
+    return base + float(np.polynomial.polynomial.polyval(x, _WV_THETA_LAT[subswath]))
 
 
 def _to_3d(lonlat: np.ndarray, r_e_km: float = R_E_KM) -> np.ndarray:
@@ -227,11 +243,12 @@ def _pass_direction_per_ring(centers: np.ndarray) -> np.ndarray:
     return np.where(dlat >= 0.0, ASCENDING, DESCENDING)
 
 
-def _solve_window(centers: np.ndarray, r_s: np.ndarray, mean_lat: float):
+def _solve_window(centers: np.ndarray, r_s: np.ndarray, ring_lat: np.ndarray):
     """Sub-satellite point, heading and subswath of each ring of a window.
 
-    ``centers`` are the (n, 3) ring centres (km, ECEF, time order) and
-    ``r_s`` the (n,) satellite geocentric distances (km).  Returns
+    ``centers`` are the (n, 3) ring centres (km, ECEF, time order), ``r_s``
+    the (n,) satellite geocentric distances (km) and ``ring_lat`` the (n,)
+    ring latitudes (deg) used by the look-angle law.  Returns
     ``(q, heading_deg, is_wv1)``: the (n, 3) sub-satellite points, the (n,)
     in-plane tangent headings and the (n,) WV1 flags.
     """
@@ -313,7 +330,7 @@ def _solve_window(centers: np.ndarray, r_s: np.ndarray, mean_lat: float):
     for i in range(n_ring):
         sw = 1 if is_wv1[i] else 2
         h = r_s[i] - R_E_KM
-        th = math.radians(wv_theta_deg(sw, r_s[i], mean_lat))
+        th = math.radians(wv_theta_deg(sw, r_s[i], ring_lat[i]))
         d_km = h * math.tan(th)
         d_m = d1m if sw == 1 else d2m
         delta0 = d_m + d_km
@@ -432,7 +449,7 @@ def estimate_wv_angles(
     if window == "auto":
         window = WV_AUTO_WINDOW if n_ring > WV_AUTO_WINDOW_MIN_RINGS else None
     if window is None or n_ring <= 2 * int(window) + 1:
-        q, burst_heading, is_wv1 = _solve_window(centers, r_s, mean_lat)
+        q, burst_heading, is_wv1 = _solve_window(centers, r_s, ring_lat)
     else:
         w = int(window)
         if w < 2:
@@ -444,8 +461,7 @@ def estimate_wv_angles(
         for i in range(n_ring):
             lo = min(max(i - w, 0), n_ring - size)
             sub = slice(lo, lo + size)
-            qw, hw, sw = _solve_window(centers[sub], r_s[sub],
-                                       float(ring_lat[sub].mean()))
+            qw, hw, sw = _solve_window(centers[sub], r_s[sub], ring_lat[sub])
             q[i], burst_heading[i], is_wv1[i] = qw[i - lo], hw[i - lo], sw[i - lo]
 
     # Target points -> nearest imagette ring, then per-point angles.
@@ -459,11 +475,12 @@ def estimate_wv_angles(
     ring_index = np.argmin(d, axis=1)
 
     # A point is inside the footprint when it is within its nearest ring's
-    # circumscribed radius (centre to farthest vertex), with a 10 % margin.
+    # circumscribed radius (centre to farthest vertex), with a 25 % margin:
+    # the ESA OCN owi grid extends up to ~20 % beyond some imagette rings.
     ring_radius = np.array([
         np.linalg.norm(_to_3d(r) - c, axis=1).max() for r, c in zip(rings, centers, strict=True)
     ])
-    outside = d[np.arange(len(p)), ring_index] > 1.1 * ring_radius[ring_index]
+    outside = d[np.arange(len(p)), ring_index] > 1.25 * ring_radius[ring_index]
     if outside.any() and on_outside == "raise":
         j = int(np.flatnonzero(outside)[0])
         raise ValueError(

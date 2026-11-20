@@ -44,8 +44,8 @@ class S1Geometry:
         incidence / elevation angles were estimated, otherwise ``None``.  For
         ``"WV"`` the heading is the WV track model of :mod:`s1_geometry.wv`
         (not the IW latitude polynomial) and its uncertainty is
-        :data:`~s1_geometry.wv.WV_HEADING_UNCERTAINTY_DEG` (0.25 deg, the
-        p95 error of the worst product of the S1C validation).
+        :data:`~s1_geometry.wv.WV_HEADING_UNCERTAINTY_DEG` (0.4 deg, the
+        p95 error of the worst product of the S1A / S1C / S1D validation).
     beam:
         SM beam (``"S1".."S6"``) when :attr:`mode` is ``"SM"``, otherwise
         ``None``.  The SM chain is spec-based and not validated against ESA

@@ -28,7 +28,7 @@ def test_estimate_geometry_wv_from_odata_footprint(product):
     assert geo.mode == "WV"
     assert geo.subswath == subswaths[3]
     assert geo.orbit_direction == "ascending"  # the synthetic track flies north
-    assert geo.heading_uncertainty_deg == pytest.approx(0.25)
+    assert geo.heading_uncertainty_deg == pytest.approx(0.4)
     assert 7063.0 < geo.r_s_km < 7085.0
     assert abs(geo.incidence_deg - truth["inc"][3]) < 1.0
     assert abs((geo.heading_deg - truth["hd"][3] + 180.0) % 360.0 - 180.0) < 1.0
