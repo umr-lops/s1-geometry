@@ -1,168 +1,164 @@
 {
   "iw_asc": {
-    "product": "S1D_IW_OCN__2SDV_20260110T042252_20260110T042321_000967_00084E_2B57.SAFE",
-    "day": "2026-01-10",
     "mode": "IW",
-    "orbit": "ascending",
-    "r_s_km": 7068.919408177562,
-    "lat_mean": 23.487199783325195,
-    "incidence_deg": {
+    "pass": "ascending",
+    "product": "S1D_IW_OCN__2SDV_20260110T042252_20260110T042321_000967_00084E_2B57.SAFE",
+    "lat_mean": 23.48720042332125,
+    "incidence": {
       "n": 49949,
-      "rmse_deg": 0.46619406651827183,
-      "bias_deg": -0.4001375083090811,
-      "max_abs_err_deg": 0.802447876168209
+      "rmse_deg": 0.46619386030757737,
+      "bias_deg": -0.400137268644378,
+      "p95_abs_deg": 0.7287355947068264,
+      "max_abs_deg": 0.8024494482925917
     },
-    "elevation_deg": {
+    "elevation": {
       "n": 49949,
       "rmse_deg": 0.4820543434637655,
       "bias_deg": -0.43617077780525226,
-      "max_abs_err_deg": 0.7852278123240808
+      "p95_abs_deg": 0.7206554761549071,
+      "max_abs_deg": 0.7852278123240808
     },
-    "heading_deg": {
+    "heading": {
       "n": 49949,
       "rmse_deg": 0.3021275887951288,
       "bias_deg": -0.11193067347291108,
-      "max_abs_err_deg": 0.6831068971812329
+      "p95_abs_deg": 0.5475985093063855,
+      "max_abs_deg": 0.6831068971812329
     }
   },
   "iw_desc": {
-    "product": "S1D_IW_OCN__2SDV_20260110T063235_20260110T063257_000968_000858_DB63.SAFE",
-    "day": "2026-01-10",
     "mode": "IW",
-    "orbit": "descending",
-    "r_s_km": 7072.949119344146,
-    "lat_mean": 44.89939498901367,
-    "incidence_deg": {
-      "n": 36830,
-      "rmse_deg": 0.4816847215805025,
-      "bias_deg": -0.36460041974275026,
-      "max_abs_err_deg": 0.9824671307262918
+    "pass": "descending",
+    "product": "S1D_IW_OCN__2SDV_20260110T063235_20260110T063257_000968_000858_DB63.SAFE",
+    "lat_mean": 44.89939869827076,
+    "incidence": {
+      "n": 36707,
+      "rmse_deg": 0.4795155581332338,
+      "bias_deg": -0.36273030268083695,
+      "p95_abs_deg": 0.8477856859909259,
+      "max_abs_deg": 0.9773613704726927
     },
-    "elevation_deg": {
-      "n": 36830,
-      "rmse_deg": 0.5587049383813011,
-      "bias_deg": -0.4898131359699612,
-      "max_abs_err_deg": 1.0192458992410849
+    "elevation": {
+      "n": 36707,
+      "rmse_deg": 0.5568287523815508,
+      "bias_deg": -0.48821497007772585,
+      "p95_abs_deg": 0.9025310467196511,
+      "max_abs_deg": 1.0148700532087247
     },
-    "heading_deg": {
-      "n": 36830,
-      "rmse_deg": 0.66485809240041,
-      "bias_deg": -0.14603767182329944,
-      "max_abs_err_deg": 1.3989771607199089
+    "heading": {
+      "n": 36707,
+      "rmse_deg": 0.6655486435738884,
+      "bias_deg": -0.14566721987591918,
+      "p95_abs_deg": 1.1527384638667593,
+      "max_abs_deg": 1.3989771607199089
     }
   },
   "ew_asc": {
-    "product": "S1D_EW_OCN__2SDV_20261106T191651_20261106T191758_005351_00A31E_D0E6.SAFE",
-    "day": "2026-11-06",
     "mode": "EW",
-    "orbit": "ascending",
-    "r_s_km": 7072.621538322814,
-    "lat_mean": 43.18809127807617,
-    "incidence_deg": {
-      "n": 188580,
-      "rmse_deg": 1.3748143763409055,
-      "bias_deg": -0.9876809433065743,
-      "max_abs_err_deg": 2.9157733839379425
+    "pass": "ascending",
+    "product": "S1D_EW_OCN__2SDV_20260221T230012_20260221T230039_001590_0020A4_339D.SAFE",
+    "lat_mean": -42.20669857875158,
+    "incidence": {
+      "n": 74811,
+      "rmse_deg": 0.890920014825459,
+      "bias_deg": -0.4992732074847223,
+      "p95_abs_deg": 1.6341063273662435,
+      "max_abs_deg": 1.9236135593595378
     },
-    "elevation_deg": {
-      "n": 188580,
-      "rmse_deg": 1.3193650772539012,
-      "bias_deg": -1.0245065988255206,
-      "max_abs_err_deg": 2.710657247019803
+    "elevation": {
+      "n": 74811,
+      "rmse_deg": 0.6679806218861635,
+      "bias_deg": -0.20686441422857946,
+      "p95_abs_deg": 1.2366117691141163,
+      "max_abs_deg": 1.6063165373478085
     },
-    "heading_deg": {
-      "n": 188580,
-      "rmse_deg": 1.2965227327411246,
-      "bias_deg": 0.7904234023995222,
-      "max_abs_err_deg": 3.015067313477914
+    "heading": {
+      "n": 74811,
+      "rmse_deg": 1.393820846948659,
+      "bias_deg": -0.9190203540857135,
+      "p95_abs_deg": 2.5460288690460118,
+      "max_abs_deg": 2.841801855772701
     }
   },
   "ew_desc": {
-    "product": "S1D_EW_OCN__2SDV_20260416T081150_20260416T081250_002369_003DD0_9AF8.SAFE",
-    "day": "2026-04-16",
     "mode": "EW",
-    "orbit": "descending",
-    "r_s_km": 7072.9344004445575,
-    "lat_mean": 41.783687591552734,
-    "incidence_deg": {
-      "n": 168821,
-      "rmse_deg": 1.4304973354279447,
-      "bias_deg": -1.1290894123226685,
-      "max_abs_err_deg": 2.858986839390216
+    "pass": "descending",
+    "product": "S1D_EW_OCN__2SDV_20260416T081150_20260416T081250_002369_003DD0_9AF8.SAFE",
+    "lat_mean": 41.78368592242355,
+    "incidence": {
+      "n": 167820,
+      "rmse_deg": 1.4246082723223323,
+      "bias_deg": -1.1245221839569428,
+      "p95_abs_deg": 2.4714679005738867,
+      "max_abs_deg": 2.8428208405074464
     },
-    "elevation_deg": {
-      "n": 168821,
-      "rmse_deg": 1.3768136020803796,
-      "bias_deg": -1.1458478041875513,
-      "max_abs_err_deg": 2.660804200272196
+    "elevation": {
+      "n": 167820,
+      "rmse_deg": 1.3716963189146214,
+      "bias_deg": -1.1418446839643859,
+      "p95_abs_deg": 2.3165676304366465,
+      "max_abs_deg": 2.646715708521249
     },
-    "heading_deg": {
-      "n": 168821,
-      "rmse_deg": 1.2208414062440387,
-      "bias_deg": -0.7357014391883775,
-      "max_abs_err_deg": 2.8181408514364534
+    "heading": {
+      "n": 167820,
+      "rmse_deg": 1.2209919247526104,
+      "bias_deg": -0.7366617647351482,
+      "p95_abs_deg": 2.28024117366591,
+      "max_abs_deg": 2.8181408514364534
     }
   },
   "wv_asc": {
-    "product": "S1D_WV_OCN__2SSV_20260828T233712_20260828T234055_004332_007FE6_03DE.SAFE",
-    "day": "2026-08-28",
     "mode": "WV",
-    "orbit": "ascending",
-    "r_s_km": 7079.760966843165,
-    "lat_mean": -22.536455154418945,
-    "incidence_deg": {
+    "pass": "ascending",
+    "product": "S1D_WV_OCN__2SSV_20260828T233712_20260828T234055_004332_007FE6_03DE.SAFE",
+    "lat_mean": -22.536454710662365,
+    "incidence": {
       "n": 6400,
-      "rmse_deg": 0.2872059181781378,
-      "bias_deg": -0.2691677984732062,
-      "max_abs_err_deg": 0.44268145515152213
+      "rmse_deg": 0.010536224722220839,
+      "bias_deg": 0.006724392521867926,
+      "p95_abs_deg": 0.020493052676914637,
+      "max_abs_deg": 0.03845532049603051
     },
-    "elevation_deg": {
+    "elevation": {
       "n": 6400,
-      "rmse_deg": 0.2689423816058979,
-      "bias_deg": -0.2520436288990914,
-      "max_abs_err_deg": 0.41467460952310375
+      "rmse_deg": 0.01494107778946201,
+      "bias_deg": -0.012079068560831702,
+      "p95_abs_deg": 0.026105096326158143,
+      "max_abs_deg": 0.031154748328084736
     },
-    "heading_deg": {
+    "heading": {
       "n": 6400,
-      "rmse_deg": 0.09020296075611939,
-      "bias_deg": 0.08857467653401123,
-      "max_abs_err_deg": 0.10711960648222885
+      "rmse_deg": 0.1042634797485118,
+      "bias_deg": 0.10277241102122066,
+      "p95_abs_deg": 0.12451770481209223,
+      "max_abs_deg": 0.12451770481209223
     }
   },
   "wv_desc": {
-    "product": "S1D_WV_OCN__2SSV_20260826T015607_20260826T020019_004290_007E63_62F7.SAFE",
-    "day": "2026-08-26",
     "mode": "WV",
-    "orbit": "descending",
-    "r_s_km": 7080.857312560283,
-    "lat_mean": -33.1666374206543,
-    "incidence_deg": {
+    "pass": "descending",
+    "product": "S1D_WV_OCN__2SSV_20260826T015607_20260826T020019_004290_007E63_62F7.SAFE",
+    "lat_mean": -33.16663648578856,
+    "incidence": {
       "n": 7200,
-      "rmse_deg": 0.19234091349766458,
-      "bias_deg": -0.15439070058656798,
-      "max_abs_err_deg": 0.34196361989367574
+      "rmse_deg": 0.036366305119274286,
+      "bias_deg": 0.03144294040684625,
+      "p95_abs_deg": 0.06540106868850849,
+      "max_abs_deg": 0.08663442563475598
     },
-    "elevation_deg": {
+    "elevation": {
       "n": 7200,
-      "rmse_deg": 0.1747487949821353,
-      "bias_deg": -0.1374054498306283,
-      "max_abs_err_deg": 0.3123153517962969
+      "rmse_deg": 0.02793094110508076,
+      "bias_deg": 0.025375803505551305,
+      "p95_abs_deg": 0.048453584650986946,
+      "max_abs_deg": 0.06708411648790857
     },
-    "heading_deg": {
+    "heading": {
       "n": 7200,
-      "rmse_deg": 0.09121586664581148,
-      "bias_deg": -0.08921084807703174,
-      "max_abs_err_deg": 0.11061735364444303
+      "rmse_deg": 0.104797087398447,
+      "bias_deg": -0.1027924090230466,
+      "p95_abs_deg": 0.12646464408697966,
+      "max_abs_deg": 0.12646464408697966
     }
-  },
-  "sm_asc": {
-    "product": "synthetic (no SM L2 products in the CDSE archive)",
-    "mode": "SM",
-    "orbit": "ascending"
-  },
-  "sm_desc": {
-    "product": "synthetic (no SM L2 products in the CDSE archive)",
-    "mode": "SM",
-    "orbit": "descending"
   }
 }

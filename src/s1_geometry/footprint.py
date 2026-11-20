@@ -2,9 +2,9 @@
 
 The footprint of a Sentinel-1 IW/EW acquisition is the 4-vertex SAFE polygon
 (the ``GeoFootprint`` column of the CDSE daily Parquets, or the geometry of a
-matchup STAC item).  A WV acquisition instead imaged two subswaths in a
-sequence of bursts, so its ``GeoFootprint`` is a *MultiPolygon* of one small
-ring per burst; see :func:`as_multipolygon` and :mod:`s1_geometry.wv`.  The
+matchup STAC item).  A WV acquisition instead images small imagettes on two
+alternating subswaths, so its ``GeoFootprint`` is a *MultiPolygon* of one
+small ring per imagette; see :func:`as_multipolygon` and :mod:`s1_geometry.wv`.  The
 orbit (pass) direction of a ring is derived here; see
 :func:`orbit_direction_from_ring` for the rule and the supported vertex-order
 conventions.
@@ -141,7 +141,7 @@ def as_multipolygon(
     ``(N_i, 2)`` (lon, lat) arrays, one per sub-polygon, in the given order.
 
     For a WV acquisition the CDSE ``GeoFootprint`` is a MultiPolygon of one
-    small (~14 km) ring per burst; the ring order is the burst (time) order,
+    small (~20 km) ring per imagette; the ring order is the time order,
     alternating between the two subswaths (see :mod:`s1_geometry.wv`).
     """
     if isinstance(geom, str):

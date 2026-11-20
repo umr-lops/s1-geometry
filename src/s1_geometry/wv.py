@@ -29,7 +29,7 @@ alone.  The angles are returned **per ground point**.  The model:
   convention the near subswath WV1 is the *larger*-offset chain;
 * label the two subswath chains from the gap in the ring centres' track-plane
   offset (WV1 = the larger-offset chain, closer to nadir);
-* for each burst, the ground-range offset ``d_k = h tan(theta_k)`` with the
+* for each imagette, the ground-range offset ``d_k = h tan(theta_k)`` with the
   calibrated look-angle law :func:`wv_theta_deg`; the sub-satellite point is
   placed beyond the WV1 chain (``delta0 = d_m + d_km``);
 * for each target point: the incidence (angle at the ground, from the local
@@ -196,7 +196,7 @@ class S1WVAngles:
     mean_lat_deg:
         Mean latitude (deg) of the footprint ring centres.
     n_rings:
-        Number of burst rings in the footprint.
+        Number of imagette rings in the footprint.
     lon_deg, lat_deg:
         (N,) target point longitudes / latitudes (deg), as passed in.
     incidence_deg:
@@ -206,10 +206,11 @@ class S1WVAngles:
         (N,) radar elevation angle at each point (``incidence - gamma``, the
         ESA L2 OCN ``*ElevationAngle`` convention), in degrees.
     heading_deg:
-        (N,) heading (deg, clockwise from North) of the burst each point maps
+        (N,) heading (deg, clockwise from North) of the imagette each point maps
         to (the in-plane tangent azimuth at the sub-satellite point).
     ring_index:
-        (N,) index of the burst ring each point maps to (nearest ring centre).
+        (N,) index of the imagette ring each point maps to (nearest ring centre,
+        0-based, time order).
     subswath:
         (N,) 1 or 2, the subswath each point belongs to.
     """

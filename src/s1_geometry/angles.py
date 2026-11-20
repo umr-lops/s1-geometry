@@ -10,8 +10,9 @@ ground swath over the orbit).  Two consistent models are combined
   satellite geocentric distance ``R_s`` (the CDSE catalogue polygon is
   computed with the mean Earth radius 6371 km: the observed IW width 251 to
   274 km over the altitude cycle matches the 6371 km model, 248 to 271 km).
-  Inverting ``W -> R_s`` (bisection) calibrates the satellite altitude from
-  the footprint alone, no orbit file needed.
+  Inverting ``W -> R_s`` (bisection) gives a *footprint-equivalent*
+  satellite distance from the footprint alone, no orbit file needed (within
+  about +/-9 km of the true distance; the angles change by ~0.06 deg per km).
 * **Off-nadir** (the actual radar steering).  With the satellite distance
   ``R_s``, the geocentric radius ``R_e`` of the reference point and the
   off-nadir angle ``sigma`` (the linear roll law between the documented
