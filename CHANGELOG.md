@@ -16,6 +16,15 @@ git tags (calendar versioning, `YYYY.MM.DD`).
 - `estimate_geometry(..., mode="WV")` and the `s1-geometry wv` CLI subcommand.
 - `s1_geometry.table.add_wv_angle_columns`: add the WV angle columns to a
   pandas table of reference points.
+- WV validation on 63 Sentinel-1C L2 OCN products from the metadata only
+  (`scripts/validate_wv_ocn.py`): RMSE 0.24 / 0.23 / 0.09 deg (incidence /
+  elevation / heading); WV heading uncertainty 0.25 deg.
+- `window="auto"` (default) in `estimate_wv_angles`: sliding-window track fit
+  for products of more than 40 imagettes (halves their error).
+- `merge_antimeridian_splits`: imagettes cut in two at +/-180 deg by the OData
+  `Footprint` are re-joined.
+- WV rings must be in time order; a re-ordered geometry (e.g. the `geometry`
+  column of the daily Parquets) is rejected.
 - `parse_wkt`: WKT / EWKT (`geography'SRID=4326;MULTIPOLYGON (...)'`, the OData
   `Footprint`) accepted wherever a polygon is.
 

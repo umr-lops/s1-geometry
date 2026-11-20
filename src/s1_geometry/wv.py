@@ -38,11 +38,15 @@ alone.  The angles are returned **per ground point**.  The model:
   azimuth, clockwise from North).
 
 Validated point-by-point against the ESA L2 OCN ``owi`` grid (incidence,
-elevation, heading) on two Sentinel-1D products (one ascending, one
-descending, mid latitudes, ``r_s`` from the OCN state vectors): RMSE
-0.19-0.29 deg (incidence), 0.18-0.27 deg (elevation), 0.09 deg (heading).
-See :doc:`/certification`.  Wider validation (S1A / S1C, high latitudes,
-long products, ``r_s`` from the orbit model) is pending.
+elevation, heading), from the footprint metadata only (``r_s`` from the
+orbit model): 63 Sentinel-1C products (2025-01 to 2026-11, latitudes -74 to
++52 deg, up to 118 imagettes / 29 min), 1.43 million cells: RMSE 0.24 deg
+(incidence), 0.23 deg (elevation), 0.09 deg (heading), subswath labels 100 %
+correct; and two Sentinel-1D products.  See :doc:`/certification`.
+
+Limits: a product needs at least 4 imagettes (end-of-datatake products with
+2 imagettes are rejected); the rings must be in time order; the orbit model
+assumes the operational reference orbit (not the commissioning phase).
 """
 
 from __future__ import annotations
@@ -53,10 +57,18 @@ from dataclasses import dataclass
 import numpy as np
 
 from s1_geometry.angles import R_E_KM
-from s1_geometry.footprint import ASCENDING, DESCENDING, as_multipolygon
+from s1_geometry.footprint import (
+    ASCENDING,
+    DESCENDING,
+    as_multipolygon,
+    merge_antimeridian_splits,
+)
 from s1_geometry.orbit import R_S_ORBIT_MAX_KM, R_S_ORBIT_MIN_KM, satellite_radius_km
 
 __all__ = [
+    "WV_AUTO_WINDOW",
+    "WV_AUTO_WINDOW_MIN_RINGS",
+    "WV_HEADING_UNCERTAINTY_DEG",
     "S1WVAngles",
     "WV_THETA_DOC",
     "estimate_wv_angles",
@@ -71,6 +83,15 @@ WV_THETA_DOC = {
 }
 
 _ALT_MIN, _ALT_MAX, _REF_ALT = 697.6, 725.8, 711.7
+
+#: ``window="auto"``: products with more imagettes than this are fitted with a
+#: sliding window of +/- ``WV_AUTO_WINDOW`` imagettes (S1C validation).
+WV_AUTO_WINDOW_MIN_RINGS = 40
+WV_AUTO_WINDOW = 10
+
+#: WV heading uncertainty (deg): the 95th percentile of the heading error of
+#: the worst product of the S1C validation (0.234 deg), rounded up.
+WV_HEADING_UNCERTAINTY_DEG = 0.25
 
 #: Calibrated latitude term ``(deg/deg, deg)`` of the look-angle law, fitted on
 #: 64 WV OCN products (2026-01..06); residual std 0.086 deg (WV1) / 0.065 deg
@@ -120,6 +141,20 @@ def _enu_basis(slon_deg: float, slat_deg: float):
     u = np.array([math.cos(latr) * math.cos(lonr),
                   math.cos(latr) * math.sin(lonr), math.sin(latr)])
     return e, n, u
+
+
+def _closed(ring: np.ndarray) -> np.ndarray:
+    """The ring with its first vertex repeated at the end.
+
+    The ring centre is the mean of the closed ring's vertices (the first
+    vertex counted twice): this is the convention of the CDSE footprints the
+    look-angle law was calibrated with (the unweighted vertex mean gives a
+    0.33 deg instead of 0.24 deg incidence RMSE on the S1C validation), so it
+    is enforced whatever the input form.
+    """
+    if np.allclose(ring[0], ring[-1]):
+        return ring
+    return np.vstack([ring, ring[:1]])
 
 
 def _fit_plane_min(p: np.ndarray):
@@ -246,11 +281,20 @@ def _solve_window(centers: np.ndarray, r_s: np.ndarray, mean_lat: float):
     if gaps[k] < 10.0:
         raise ValueError(
             "WV footprint does not show two distinct subswath chains "
-            f"(largest track-plane offset gap {gaps[k]:.1f} km)")
+            f"(largest track-plane offset gap {gaps[k]:.1f} km); are the rings in "
+            "time order (the CDSE Footprint / GeoFootprint order)?")
     thr = 0.5 * (srt[k] + srt[k + 1])
     is_wv1 = offset >= thr  # WV1 = larger offset (closer to the nadir)
     if not is_wv1.any() or is_wv1.all():
         raise ValueError("WV subswath chain labeling failed (single chain)")
+    # In time order the imagettes alternate between WV1 and WV2 (checked on
+    # every CDSE WV product); a footprint whose rings are not in time order
+    # (e.g. re-ordered by a GIS union / normalisation) cannot be used.
+    if n_ring >= 4 and np.mean(np.diff(is_wv1.astype(int)) != 0) < 0.9:
+        raise ValueError(
+            "WV footprint rings are not in time order (consecutive imagettes do not "
+            "alternate between WV1 and WV2): use the CDSE Footprint / GeoFootprint, "
+            "not a re-ordered geometry")
     d1m = float(offset[is_wv1].mean())
     d2m = float(offset[~is_wv1].mean())
 
@@ -299,7 +343,7 @@ def estimate_wv_angles(
     lat,
     *,
     orbit_direction: str | None = None,
-    window: int | None = None,
+    window: int | str | None = "auto",
     on_outside: str = "raise",
 ) -> S1WVAngles:
     """Estimate the WV incidence / elevation / heading angles at target points.
@@ -309,8 +353,10 @@ def estimate_wv_angles(
     sar_multipolygon:
         The WV SAFE footprint: a GeoJSON MultiPolygon string / dict, a WKT
         ``MULTIPOLYGON`` (e.g. the CDSE OData ``Footprint``), or a sequence of
-        (lon, lat) rings (one small ring per imagette, in time order,
-        alternating between the two subswaths).
+        (lon, lat) rings (one small ring per imagette, **in time order**,
+        alternating between the two subswaths).  Imagettes split at the
+        antimeridian (two polygons in the OData ``Footprint``) are re-joined,
+        so ``ring_index`` is the imagette index (0-based, time order).
     r_s_km:
         Satellite geocentric distance (km), or ``None`` to derive it per
         ring from the metadata-only orbit model
@@ -329,10 +375,15 @@ def estimate_wv_angles(
         time progression, which also handles products crossing the polar
         turn (the catalogue attribute only describes the product start).
     window:
-        ``None`` (default, the validated behaviour) fits one track geometry to
-        the whole product.  An integer ``w`` fits the geometry of each ring
-        on the ``2 w + 1`` rings around it, for long products whose ground
-        track departs from a single great circle (Earth rotation).
+        ``"auto"`` (default): one track geometry for products of up to
+        :data:`WV_AUTO_WINDOW_MIN_RINGS` imagettes, else a sliding window of
+        +/- :data:`WV_AUTO_WINDOW` imagettes.  ``None``: one track geometry
+        for the whole product.  An integer ``w``: the geometry of each ring
+        is fitted on the ``2 w + 1`` rings around it.  Long products (up to
+        ~30 min, 120 imagettes) have a ground track that departs from a
+        single great circle (Earth rotation): on the S1C validation the
+        sliding window halves their error (incidence RMSE 0.22 instead of
+        0.45 deg, heading 0.09 instead of 0.36 deg).
     on_outside:
         ``"raise"`` (default) raises ``ValueError`` when a target point lies
         outside every imagette ring; ``"nan"`` returns NaN angles for it.
@@ -352,7 +403,7 @@ def estimate_wv_angles(
     """
     if on_outside not in ("raise", "nan"):
         raise ValueError(f"on_outside must be 'raise' or 'nan', got {on_outside!r}")
-    rings = as_multipolygon(sar_multipolygon)
+    rings = [_closed(r) for r in merge_antimeridian_splits(as_multipolygon(sar_multipolygon))]
     if len(rings) < 4:
         raise ValueError(
             f"WV footprint needs at least 4 imagette rings (two per subswath), "
@@ -378,6 +429,8 @@ def estimate_wv_angles(
                 f"{R_S_ORBIT_MIN_KM:.1f} to {R_S_ORBIT_MAX_KM:.1f} km (satellite "
                 "geocentric distance, not the altitude above the ellipsoid)")
 
+    if window == "auto":
+        window = WV_AUTO_WINDOW if n_ring > WV_AUTO_WINDOW_MIN_RINGS else None
     if window is None or n_ring <= 2 * int(window) + 1:
         q, burst_heading, is_wv1 = _solve_window(centers, r_s, mean_lat)
     else:

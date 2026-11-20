@@ -124,7 +124,11 @@ df = add_wv_angle_columns(pd.read_parquet("wv.parquet"),
 ```
 
 A **single imagette polygon is not enough** (the two subswath chains of the
-product locate the track plane): pass the product footprint.
+product locate the track plane): pass the product footprint (at least 4
+imagettes), with the rings **in time order** — the CDSE `Footprint` /
+`GeoFootprint`, not the re-ordered `geometry` column of the daily Parquets
+(it is detected and rejected). Imagettes split at the antimeridian are
+re-joined.
 
 The reference point must lie **inside the SAFE footprint** (the 4-vertex
 parallelogram, boundary included).  If it is outside,
@@ -241,9 +245,14 @@ POEORB state vectors (S1A 2026-06-29, S1C 2025-12-10, S1D 2026-05-11 and
 2026-10-29; `scripts/calibrate_orbit_radius.py`, public `s1-orbits` bucket):
 residual std 0.10 km, max 0.29 km at the WV1 / WV2 target latitudes, bias
 per satellite below 0.04 km (~0.02 deg of incidence). The WV angle chain is
-validated against the ESA L2 OCN `owi` grid on two S1D products (RMSE
-incidence 0.19-0.29 deg, elevation 0.18-0.27 deg, heading 0.09 deg); see the
-docs certification page.
+validated, from the footprint metadata only, against the ESA L2 OCN `owi`
+grid of **63 Sentinel-1C products** (2025-01 to 2026-11, latitudes -74 to
++52 deg, up to 118 imagettes / 29 min, 1.43 million cells): **RMSE incidence
+0.24 deg, elevation 0.23 deg, heading 0.09 deg** (max 0.26 deg), subswath
+labels 100 % correct (`scripts/validate_wv_ocn.py`). The heading uncertainty
+returned for WV is 0.25 deg (p95 of the worst product). Long products need the
+sliding-window track fit (`window="auto"`, default). Not covered: products
+with fewer than 4 imagettes, the commissioning phase of a satellite.
 
 ## Roadmap
 
@@ -251,8 +260,10 @@ docs certification page.
 - [x] Incidence angle estimator `sar_incidence_angle` (IW + EW, SM spec-based)
 - [x] Elevation angle estimator `sar_elevation_angle` (IW + EW, SM spec-based)
 - [x] WV incidence / elevation / heading from the OData metadata only
-- [ ] WV validation on S1A / S1C, high latitudes and long products
-- [ ] WV heading uncertainty model
+- [x] WV validation on S1C (63 products, long products, -74 to +52 deg)
+- [x] WV heading uncertainty (0.25 deg)
+- [ ] WV validation on S1A (and more S1D)
+- [ ] WV products with fewer than 4 imagettes (end of datatake)
 
 ## Development
 

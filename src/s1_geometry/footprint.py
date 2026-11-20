@@ -177,6 +177,49 @@ def as_multipolygon(
     return rings
 
 
+def _on_antimeridian(ring: np.ndarray) -> np.ndarray:
+    return np.abs(np.abs(ring[:, 0]) - 180.0) < 1e-6
+
+
+def merge_antimeridian_splits(rings: list[np.ndarray]) -> list[np.ndarray]:
+    """Re-join the WV imagette rings split at the antimeridian.
+
+    The CDSE OData ``Footprint`` cuts an imagette crossing +/-180 deg into two
+    consecutive polygons (one on each side), so the product has one ring more
+    than imagettes and the WV1 / WV2 alternation is broken.  Two consecutive
+    rings that both touch the antimeridian on opposite sides, with
+    overlapping latitude ranges, are merged: the cut vertices (on +/-180 deg)
+    are dropped and the remaining corners (first piece's, then second
+    piece's, in their original order) are unwrapped next to the first piece's
+    longitude.  The merged ring may have longitudes beyond +/-180 deg,
+    which every computation of :mod:`s1_geometry.wv` (ECEF) handles.
+    """
+    out: list[np.ndarray] = []
+    i = 0
+    while i < len(rings):
+        a = rings[i]
+        if i + 1 < len(rings):
+            b = rings[i + 1]
+            on_a, on_b = _on_antimeridian(a), _on_antimeridian(b)
+            if (
+                on_a.any() and on_b.any()
+                and np.sign(a[on_a, 0][0]) != np.sign(b[on_b, 0][0])
+                and a[:, 1].min() <= b[:, 1].max() and b[:, 1].min() <= a[:, 1].max()
+            ):
+                side = np.sign(a[on_a, 0][0])  # the first piece is at side * 180
+                pts = np.vstack([a[~on_a], b[~on_b]])
+                pts[:, 0] = np.where(np.sign(pts[:, 0]) == side, pts[:, 0],
+                                     pts[:, 0] + side * 360.0)
+                _, first = np.unique(pts.round(9), axis=0, return_index=True)
+                pts = pts[np.sort(first)]
+                out.append(np.vstack([pts, pts[:1]]))
+                i += 2
+                continue
+        out.append(a)
+        i += 1
+    return out
+
+
 def _closed_ring_vertices(points: np.ndarray) -> list[tuple[float, float]]:
     """The first 4 ring vertices, closed, as (lon, lat) tuples."""
     vertices = [tuple(vertex) for vertex in points[:4]]

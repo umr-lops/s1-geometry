@@ -21,7 +21,6 @@ import json
 
 import numpy as np
 
-from s1_geometry.footprint import as_multipolygon
 from s1_geometry.wv import estimate_wv_angles
 
 __all__ = ["WV_COLUMNS", "add_wv_angle_columns"]
@@ -33,13 +32,6 @@ WV_COLUMNS = (
     "sar_ground_heading",
     "sar_wv_subswath",
 )
-
-#: Products with more imagette rings than this are fitted with a sliding
-#: window of ``_AUTO_WINDOW`` rings on each side (long products, whose ground
-#: track departs from a single great circle).
-_AUTO_WINDOW_MIN_RINGS = 40
-_AUTO_WINDOW = 10
-
 
 def _key(value) -> str:
     return value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=list)
@@ -73,9 +65,8 @@ def add_wv_angle_columns(
         Satellite geocentric distance (km); ``None`` (default) uses the
         metadata-only orbit model.
     window:
-        ``"auto"`` (default): global track fit for products of up to 40
-        imagettes, a sliding window of +/- 10 imagettes beyond.  ``None`` or
-        an integer: passed to :func:`~s1_geometry.wv.estimate_wv_angles`.
+        Passed to :func:`~s1_geometry.wv.estimate_wv_angles` (default
+        ``"auto"``).
     on_outside:
         ``"nan"`` (default) or ``"raise"`` for reference points outside every
         imagette of their footprint.
@@ -104,12 +95,8 @@ def add_wv_angle_columns(
     for rows in groups.values():
         geom = out[footprint].iloc[rows[0]]
         try:
-            win = window
-            if window == "auto":
-                n_rings = len(as_multipolygon(geom))
-                win = _AUTO_WINDOW if n_rings > _AUTO_WINDOW_MIN_RINGS else None
             res = estimate_wv_angles(geom, r_s_km, lons[rows], lats[rows],
-                                     window=win, on_outside=on_outside)
+                                     window=window, on_outside=on_outside)
         except ValueError:
             if on_error == "raise":
                 raise

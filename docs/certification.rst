@@ -177,6 +177,43 @@ WV
 | descending| heading   | 7,200  | 0.091   | -0.089  | 0.111    |
 +-----------+-----------+--------+---------+---------+----------+
 
+Sentinel-1C statistical validation (metadata only)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``scripts/validate_wv_ocn.py`` runs the metadata-only chain -- the product
+footprint (the ``manifest.safe`` imagette rings, identical to the CDSE OData
+``Footprint``) and ``r_s`` from the orbit model of :mod:`s1_geometry.orbit`,
+``window="auto"`` -- on every ``owi`` cell of 63 S1C WV OCN products (one day
+per month from 2025-01-17 to 2026-11-12, three products per day spread over
+the day; 27 ascending, 36 descending; latitudes -73.9 to +51.7 deg; 45
+products longer than 40 imagettes, up to 118 imagettes / 28.6 min).  Per
+product statistics: ``_static/certification/wv_s1c_validation.csv``.
+
++-----------+---------+---------+------------------+-------------+
+| angle     | RMSE    | bias    | p95 (worst prod.)| max|err|    |
++===========+=========+=========+==================+=============+
+| incidence | 0.243   | -0.103  | 1.168            | 1.308       |
++-----------+---------+---------+------------------+-------------+
+| elevation | 0.232   | -0.094  | 1.050            | 1.178       |
++-----------+---------+---------+------------------+-------------+
+| heading   | 0.094   | -0.015  | 0.234            | 0.260       |
++-----------+---------+---------+------------------+-------------+
+
+1,427,863 cells, none outside the footprint, subswath (WV1 / WV2) labels
+100 % correct.  Products of more than 40 imagettes need the sliding-window
+track fit: their median incidence RMSE is 0.22 deg with it and 0.45 deg with
+a single track geometry (heading 0.09 vs 0.36 deg).  The worst product
+(2025-01-17, incidence bias +0.94 deg) was acquired during the S1C
+commissioning phase, before the operational orbit (no S1C POEORB exists
+before 2025-03-08); without the commissioning products: 57 products,
+incidence RMSE 0.235 deg.  Six end-of-datatake products with only 2
+imagettes were skipped (at least 4 are needed).
+
+The centre of an imagette ring is the mean of its *closed* ring vertices (the
+first vertex counted twice), the convention of the footprints the look-angle
+law was calibrated with: the plain vertex mean gives an incidence RMSE of
+0.33 deg instead of 0.24 deg.
+
 SM
 ^^^
 

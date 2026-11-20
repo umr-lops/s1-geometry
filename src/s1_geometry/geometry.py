@@ -20,7 +20,7 @@ from s1_geometry.footprint import (
     orbit_direction_from_ring,
 )
 from s1_geometry.heading import heading_from_lat, sar_ground_heading_uncertainty
-from s1_geometry.wv import estimate_wv_angles
+from s1_geometry.wv import WV_HEADING_UNCERTAINTY_DEG, estimate_wv_angles
 
 
 @dataclass(frozen=True)
@@ -43,8 +43,9 @@ class S1Geometry:
         Imaging mode (``"IW"``, ``"EW"``, ``"SM"`` or ``"WV"``) when the
         incidence / elevation angles were estimated, otherwise ``None``.  For
         ``"WV"`` the heading is the WV track model of :mod:`s1_geometry.wv`
-        (not the IW latitude polynomial) and its uncertainty is ``nan`` (not
-        characterised yet: the validated RMSE is ~0.1 deg on two products).
+        (not the IW latitude polynomial) and its uncertainty is
+        :data:`~s1_geometry.wv.WV_HEADING_UNCERTAINTY_DEG` (0.25 deg, the
+        p95 error of the worst product of the S1C validation).
     beam:
         SM beam (``"S1".."S6"``) when :attr:`mode` is ``"SM"``, otherwise
         ``None``.  The SM chain is spec-based and not validated against ESA
@@ -92,7 +93,7 @@ def _estimate_wv_geometry(sar_polygon, ref_lon, ref_lat, r_s_km, orbit_direction
         orbit_direction=orbit,
         ref_lat=float(ref_lat),
         heading_deg=heading,
-        heading_uncertainty_deg=float("nan"),
+        heading_uncertainty_deg=WV_HEADING_UNCERTAINTY_DEG,
         mode="WV",
         incidence_deg=float(wv.incidence_deg[0]),
         elevation_deg=float(wv.elevation_deg[0]),
